@@ -23,7 +23,11 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title,
     description,
-    icons: { icon: "/favicon.svg", shortcut: "/favicon.svg", apple: "/favicon.svg" },
+    icons: {
+      icon: [{ url: "/favicon.svg", type: "image/svg+xml" }, { url: "/apple-touch-icon.png", type: "image/png", sizes: "512x512" }],
+      shortcut: "/favicon.svg",
+      apple: [{ url: "/apple-touch-icon.png", type: "image/png", sizes: "512x512" }],
+    },
     openGraph: { title, description, images: [{ url: image, width: 1536, height: 1024, alt: "BIR Zonal Values — City to Barangay to Street" }] },
     twitter: { card: "summary_large_image", title, description, images: [image] },
   };

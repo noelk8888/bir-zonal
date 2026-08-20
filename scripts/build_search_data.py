@@ -145,6 +145,15 @@ def main() -> None:
         },
         key=lambda value: (int(re.match(r"\d+", value).group()), value),
     )
+    region_feeds: dict[str, set[str]] = defaultdict(set)
+    region_names: dict[str, str] = {}
+    for item in source_manifest.get("entries", []):
+        match = re.search(r"Revenue Region\s+([0-9]+[A-Z]?)", item.get("revenue_region") or "", re.I)
+        dataset_id = str(item.get("dataset_id") or "").strip()
+        if match and dataset_id:
+            code = match.group(1).upper()
+            region_feeds[code].add(dataset_id)
+            region_names[code] = item["revenue_region"]
     (OUTPUT / "catalog-baseline.json").write_text(
         json.dumps(baseline_catalog, ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",
@@ -156,6 +165,8 @@ def main() -> None:
         "genericRowsExcluded": skipped,
         "records": sum(len(rows) for rows in shards.values()),
         "regionCodes": region_codes,
+        "regionFeeds": {code: sorted(region_feeds.get(code, set()), key=int) for code in region_codes},
+        "regions": {code: region_names.get(code, f"Revenue Region {code}") for code in region_codes},
         "cities": dict(sorted(cities.items())),
         "shards": shard_manifest,
     }

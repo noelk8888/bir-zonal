@@ -7,6 +7,8 @@ type AppIndex = {
   sourcePage: string;
   records: number;
   regionCodes: string[];
+  regionFeeds: Record<string, string[]>;
+  regions: Record<string, string>;
   cities: Record<string, { name: string; shard: string }>;
 };
 
@@ -29,6 +31,7 @@ type ZonalRecord = {
 };
 
 type CheckChange = { rdo: string; reason: string; downloadUrl?: string; records?: number };
+type LiveEntry = { revenueRegion: string; rdoName: string; province: string; details: string; downloadUrl: string };
 
 const FIFTEEN_DAYS = 15 * 24 * 60 * 60 * 1000;
 const BIR_PAGE = "https://www.bir.gov.ph/zonal-values";
@@ -99,6 +102,73 @@ function workbookLabel(record: ZonalRecord) {
 
 function rdoKey(value: string) {
   return value.match(/RDO\s*(?:No\.?\s*)?([0-9]+[A-Za-z]?)/i)?.[1]?.toUpperCase() ?? value.replace(/\W+/g, "").toLowerCase();
+}
+
+function decodeHtml(value: string) {
+  return value.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&nbsp;/g, " ").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, " ").trim();
+}
+
+function collectStrings(value: unknown, field = "", output: Array<[string, string]> = []) {
+  if (typeof value === "string") output.push([field, value]);
+  else if (Array.isArray(value)) value.forEach((child) => collectStrings(child, field, output));
+  else if (value && typeof value === "object") Object.entries(value).forEach(([childField, child]) => collectStrings(child, childField, output));
+  return output;
+}
+
+function candidateDownload(content: Record<string, unknown>) {
+  const candidates: Array<{ priority: number; url: string }> = [];
+  const seen = new Set<string>();
+  for (const [field, value] of collectStrings(content)) {
+    for (const piece of value.split(/[\r\n]/)) {
+      const [rawUrl, label = ""] = piece.split("|", 2);
+      if (!rawUrl.trim().startsWith("https://")) continue;
+      let url: URL;
+      try { url = new URL(rawUrl.trim()); } catch { continue; }
+      if (url.hostname !== "bir-cdn.bir.gov.ph" || !/\.(zip|xls|xlsx)$/i.test(decodeURIComponent(url.pathname))) continue;
+      const normalizedUrl = url.toString();
+      if (seen.has(normalizedUrl)) continue;
+      seen.add(normalizedUrl);
+      let priority = 0;
+      if (field.toLowerCase() === "files collection") priority += 10;
+      if (field.toLowerCase() === "file") priority += 4;
+      if (label.toLowerCase().includes("excel")) priority += 3;
+      if (`${field} ${label}`.toLowerCase().includes("annex")) priority -= 5;
+      candidates.push({ priority, url: normalizedUrl });
+    }
+  }
+  return candidates.sort((a, b) => b.priority - a.priority || a.url.localeCompare(b.url))[0]?.url;
+}
+
+async function liveEntriesForRegion(revenueRegion: string, datasetIds: string[]) {
+  if (!datasetIds.length) throw new Error(`${revenueRegion} has no registered official BIR feed.`);
+  const byRdo = new Map<string, LiveEntry>();
+  for (const id of datasetIds) {
+    const response = await fetch(`https://bir-cms-ws.bir.gov.ph/api/pub/templates/${encodeURIComponent(id)}/datasets?per_page=3000`, {
+      credentials: "omit",
+      headers: { "client-website-id": "2" },
+    });
+    const body = await response.text();
+    if (!response.ok) throw new Error(`Official BIR feed ${id} returned ${response.status}.`);
+    let payload: { data?: Array<Record<string, unknown>> };
+    try { payload = JSON.parse(body) as typeof payload; }
+    catch { throw new Error(`Official BIR feed ${id} returned invalid data.`); }
+    for (const row of payload.data ?? []) {
+      if (Number(row.is_active ?? 1) !== 1) continue;
+      const content = (row.content ?? {}) as Record<string, unknown>;
+      const rdoName = decodeHtml(String(content.RDO ?? row.keyword_field_1 ?? ""));
+      const province = decodeHtml(String(content.Province ?? row.keyword_field_2 ?? "")).replace(/^Province:\s*/i, "");
+      const details = decodeHtml(String(content.Municipalities ?? content.Municities ?? content.Municipality ?? ""));
+      const downloadUrl = candidateDownload(content);
+      if (!rdoName || !downloadUrl) continue;
+      const entry = { revenueRegion, rdoName, province, details, downloadUrl };
+      const office = rdoKey(rdoName);
+      const prior = byRdo.get(office);
+      if (prior && prior.downloadUrl !== downloadUrl) throw new Error(`The official BIR feed returned two different current files for ${rdoName}.`);
+      byRdo.set(office, entry);
+    }
+  }
+  if (!byRdo.size) throw new Error(`${revenueRegion} returned no active official workbooks.`);
+  return [...byRdo.values()];
 }
 
 export default function Home() {
@@ -198,7 +268,12 @@ export default function Home() {
       for (let position = 0; position < index.regionCodes.length; position += 1) {
         const region = index.regionCodes[position];
         setCheckProgress(`Checking Revenue Region ${region} · ${position + 1} of ${index.regionCodes.length}`);
-        const response = await fetch(`/api/bir/check?region=${encodeURIComponent(region)}`);
+        const entries = await liveEntriesForRegion(index.regions[region] ?? `Revenue Region ${region}`, index.regionFeeds[region] ?? []);
+        const response = await fetch(`/api/bir/check?region=${encodeURIComponent(region)}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ entries }),
+        });
         const payload = await response.json() as { changed?: CheckChange[]; error?: string };
         if (!response.ok) throw new Error(payload.error || `Revenue Region ${region} could not be checked.`);
         found.push(...(payload.changed ?? []));
