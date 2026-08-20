@@ -8,7 +8,14 @@ export async function GET(request: Request) {
   try {
     const city = key(new URL(request.url).searchParams.get("city") ?? "");
     if (!city) return Response.json({ error: "A city is required." }, { status: 400 });
-    const manifest = await readUpdateManifest();
+    let manifest;
+    try { manifest = await readUpdateManifest(); }
+    catch (error) {
+      if (error instanceof Error && error.message === "The BIR update store is unavailable.") {
+        return Response.json({ updatedRdos: [], records: [], updatedAt: null, storageMode: "baseline" });
+      }
+      throw error;
+    }
     const entries = Object.entries(manifest.rdos);
     const updatedRdos = entries.map(([rdo]) => rdo);
     const relevant = entries.filter(([, entry]) => !entry.removed && entry.recordsKey && entry.cities.some((candidate) => key(candidate) === city));

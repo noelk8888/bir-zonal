@@ -272,6 +272,7 @@ export default function Home() {
     setChanges([]);
     setCheckMessage("");
     const found: CheckChange[] = [];
+    let installsUpdates = true;
     try {
       for (let position = 0; position < index.regionCodes.length; position += 1) {
         const region = index.regionCodes[position];
@@ -279,8 +280,9 @@ export default function Home() {
         const entries = await liveEntriesForRegion(index.regions[region] ?? `Revenue Region ${region}`, index.regionFeeds[region] ?? []);
         const catalog = encodeCatalog(entries);
         const response = await fetch(`/api/bir/check?region=${encodeURIComponent(region)}&catalog=${encodeURIComponent(catalog)}`);
-        const payload = await response.json() as { changed?: CheckChange[]; error?: string };
+        const payload = await response.json() as { changed?: CheckChange[]; error?: string; storageMode?: "installed" | "check-only" };
         if (!response.ok) throw new Error(payload.error || `Revenue Region ${region} could not be checked.`);
+        if (payload.storageMode === "check-only") installsUpdates = false;
         found.push(...(payload.changed ?? []));
       }
       const checkedAt = new Date().toISOString();
@@ -293,7 +295,9 @@ export default function Home() {
         setSearched(false);
       }
       setCheckMessage(found.length
-        ? `${found.length} official BIR file change${found.length === 1 ? "" : "s"} installed. Search results now use the updated files.`
+        ? installsUpdates
+          ? `${found.length} official BIR file change${found.length === 1 ? "" : "s"} installed. Search results now use the updated files.`
+          : `${found.length} official BIR file change${found.length === 1 ? "" : "s"} detected. Search still uses the bundled reference until the app is refreshed.`
         : "No BIR changes found. Your reference is current.");
     } catch (error) {
       setCheckMessage(error instanceof Error ? error.message : "The BIR update check failed.");

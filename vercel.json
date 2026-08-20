@@ -1,9 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [
-    {
-      "source": "/:path*",
-      "destination": "https://bir-zonal-values.noelkiu.chatgpt.site/:path*"
-    }
-  ]
+  "framework": "nextjs",
+  "buildCommand": "npm run build:vercel"
 }

@@ -171,8 +171,11 @@ async function checkRegion(code: string, live: LiveEntry[]) {
   const baselineRegion = baseline.filter((entry) => regionCode(entry.revenue_region) === code);
   const baselineByRdo = new Map(baselineRegion.map((entry) => [rdoKey(entry.rdo_name), entry]));
   const liveByRdo = new Map(live.map((entry) => [rdoKey(entry.rdoName), entry]));
-  const bucket = getUpdatesBucket();
-  const manifest = await readUpdateManifest(bucket);
+  let bucket: ReturnType<typeof getUpdatesBucket> | null = null;
+  try { bucket = getUpdatesBucket(); } catch { /* Vercel uses check-only mode. */ }
+  const manifest = bucket
+    ? await readUpdateManifest(bucket)
+    : { version: 1 as const, updatedAt: null, rdos: {} };
   const changed: Array<{ rdo: string; reason: string; downloadUrl?: string; records?: number }> = [];
 
   for (const entry of liveByRdo.values()) {
@@ -185,7 +188,7 @@ async function checkRegion(code: string, live: LiveEntry[]) {
     if (matchesUpdate || (matchesBaseline && !priorUpdate)) continue;
 
     if (matchesBaseline) {
-      await deleteRdoRecords(priorUpdate?.recordsKey ?? null, bucket);
+      if (bucket) await deleteRdoRecords(priorUpdate?.recordsKey ?? null, bucket);
       delete manifest.rdos[key];
       changed.push({ rdo: entry.rdoName, reason: "returned to the published baseline", downloadUrl: entry.downloadUrl });
       continue;
@@ -193,6 +196,15 @@ async function checkRegion(code: string, live: LiveEntry[]) {
 
     const records = normalizeOfficialWorkbook(payload, entry);
     if (!records.length) throw new Error(`${entry.rdoName} changed, but no searchable current rows could be extracted.`);
+    if (!bucket) {
+      changed.push({
+        rdo: entry.rdoName,
+        reason: baselineEntry ? "update detected" : "new official file detected",
+        downloadUrl: entry.downloadUrl,
+        records: records.length,
+      });
+      continue;
+    }
     const recordsKey = recordsKeyForRdo(key);
     await writeRdoRecords(recordsKey, records, bucket);
     const now = new Date().toISOString();
@@ -214,7 +226,7 @@ async function checkRegion(code: string, live: LiveEntry[]) {
 
   for (const [key, entry] of baselineByRdo) {
     if (liveByRdo.has(key) || manifest.rdos[key]?.removed) continue;
-    await deleteRdoRecords(manifest.rdos[key]?.recordsKey ?? null, bucket);
+    if (bucket) await deleteRdoRecords(manifest.rdos[key]?.recordsKey ?? null, bucket);
     manifest.rdos[key] = {
       sha256: "", downloadUrl: "", rdoName: entry.rdo_name, rdoNumber: key,
       revenueRegion: entry.revenue_region, regionCode: code, recordsKey: null,
@@ -223,11 +235,12 @@ async function checkRegion(code: string, live: LiveEntry[]) {
     changed.push({ rdo: entry.rdo_name, reason: "removed from the current BIR catalog" });
   }
 
-  if (changed.length) await writeUpdateManifest(manifest, bucket);
+  if (bucket && changed.length) await writeUpdateManifest(manifest, bucket);
   return Response.json({
     checkedAt: new Date().toISOString(), region: code, rdoCount: liveByRdo.size,
     changed, updatesAvailable: changed.length > 0,
     installed: changed.filter((entry) => entry.reason.includes("installed")).length,
+    storageMode: bucket ? "installed" : "check-only",
   });
 }
 
