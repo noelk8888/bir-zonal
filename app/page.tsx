@@ -55,15 +55,23 @@ function streetKey(value: string) {
     .trim();
 }
 
-function parseAddress(value: string) {
+type SearchInput =
+  | { mode: "address"; street: string; barangay: string; city: string }
+  | { mode: "name"; name: string; city: string };
+
+function parseSearchInput(value: string): SearchInput | null {
   const parts = value.split(",").map((part) => part.trim()).filter(Boolean);
   const barangayIndex = parts.findIndex((part) => /\b(barangay|brgy\.?|bgy\.?|zone)\b/i.test(part));
-  if (parts.length < 3 || barangayIndex < 1 || barangayIndex >= parts.length - 1) return null;
-  return {
-    street: parts.slice(0, barangayIndex).join(", "),
-    barangay: parts[barangayIndex],
-    city: parts.slice(barangayIndex + 1).join(", "),
-  };
+  if (barangayIndex >= 1 && barangayIndex < parts.length - 1) {
+    return {
+      mode: "address",
+      street: parts.slice(0, barangayIndex).join(", "),
+      barangay: parts[barangayIndex],
+      city: parts.slice(barangayIndex + 1).join(", "),
+    };
+  }
+  if (parts.length === 2) return { mode: "name", name: parts[0], city: parts[1] };
+  return null;
 }
 
 function resolveCity(input: string, cities: AppIndex["cities"]) {
@@ -185,6 +193,7 @@ export default function Home() {
   const [loadingData, setLoadingData] = useState(true);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [searchMode, setSearchMode] = useState<SearchInput["mode"] | null>(null);
   const [message, setMessage] = useState("");
   const [results, setResults] = useState<ZonalRecord[]>([]);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
@@ -232,11 +241,12 @@ export default function Home() {
       setMessage("The BIR search index is still loading. Please try again in a moment.");
       return;
     }
-    const parsed = parseAddress(address);
+    const parsed = parseSearchInput(address);
     if (!parsed) {
-      setMessage("Enter the address as: Street, Barangay, City.");
+      setMessage("Enter either: Street, Barangay, City — or Condominium name, City.");
       return;
     }
+    setSearchMode(parsed.mode);
     const city = resolveCity(parsed.city, index.cities);
     if (!city) {
       setMessage("Can not be found. Try to search manually.");
@@ -256,13 +266,13 @@ export default function Home() {
         ...baselineRecords.filter((record) => !overridden.has(rdoKey(record.rdo))),
         ...(updatePayload.records ?? []),
       ];
-      const requestedBarangay = barangayKey(parsed.barangay);
-      const requestedStreet = streetKey(parsed.street);
-      const matches = records.filter((record) =>
-        key(record.c) === city &&
-        barangayKey(record.b) === requestedBarangay &&
-        streetKey(record.s) === requestedStreet
-      );
+      const matches = parsed.mode === "address"
+        ? records.filter((record) =>
+          key(record.c) === city &&
+          barangayKey(record.b) === barangayKey(parsed.barangay) &&
+          streetKey(record.s) === streetKey(parsed.street)
+        )
+        : records.filter((record) => key(record.c) === city && streetKey(record.s) === streetKey(parsed.name));
       if (!matches.length) setMessage("Can not be found. Try to search manually.");
       else setResults(matches);
     } catch (error) {
@@ -323,14 +333,14 @@ export default function Home() {
         <div className="search-panel">
           <p className="eyebrow">Exact address lookup</p>
           <h2>Find the official zonal value.</h2>
-          <p className="lede">Enter the street, barangay, and city. Matching is always City → Barangay → Street.</p>
+          <p className="lede">For streets, matching is always City → Barangay → Street. For a condominium, enter its official name and city; the app resolves its official barangay.</p>
           <form className="search-form" onSubmit={search}>
             <label htmlFor="address">Complete address</label>
             <div className="search-row">
-              <input id="address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="e.g. A. Del Mundo St., Brgy. 48, Caloocan City" autoComplete="street-address" />
+              <input id="address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="e.g. Shang Salcedo Place, Makati City" autoComplete="street-address" />
               <button type="submit" disabled={searching || loadingData}>{searching ? "Searching…" : "Search zonal value"}</button>
             </div>
-            <p className="input-help">Street + Barangay + City are required. Vicinity is never used as the street match.</p>
+            <p className="input-help">Street: Street + Barangay + City. Condominium: official condominium name + City. Vicinity is never used as a match.</p>
           </form>
         </div>
 
@@ -354,7 +364,7 @@ export default function Home() {
             <div className="result-list">
               {results.map((record, recordIndex) => (
                 <article className="result-card" key={`${record.rno}-${record.sheet}-${record.v}-${recordIndex}`}>
-                  <div className="result-card-head"><div><span className="match-badge">Exact street match</span><h3>{record.s}</h3><p>Vicinity: {record.v || "Not stated"}</p></div><div className="classification-grid">{record.vals.map((value) => <div key={`${value.cl}-${value.row}`}><span>{value.cl}</span><strong>{formatMoney(value.zv)}</strong><small>per square meter</small></div>)}</div></div>
+                  <div className="result-card-head"><div><span className="match-badge">{searchMode === "name" ? "Exact condominium/name match" : "Exact street match"}</span><h3>{record.s}</h3><p>Vicinity: {record.v || "Not stated"}</p></div><div className="classification-grid">{record.vals.map((value) => <div key={`${value.cl}-${value.row}`}><span>{value.cl}</span><strong>{formatMoney(value.zv)}</strong><small>per square meter</small></div>)}</div></div>
                   <dl className="details-grid">
                     <div><dt>City/Municipality</dt><dd>{record.c}</dd></div>
                     <div><dt>Barangay</dt><dd>{record.b}</dd></div>
@@ -377,7 +387,7 @@ export default function Home() {
       {!searched && (
         <section className="result-preview" aria-label="Example result format">
           <div><p className="eyebrow">What you will receive</p><h2>Every valid classification, in one answer.</h2></div>
-          <div className="rule-list"><p><strong>1</strong> Match City/Municipality</p><p><strong>2</strong> Match Barangay/Zone</p><p><strong>3</strong> Match the Street field exactly</p></div>
+          <div className="rule-list"><p><strong>1</strong> Match City/Municipality</p><p><strong>2</strong> Street: match Barangay/Zone</p><p><strong>3</strong> Street or condominium name: exact official field</p></div>
           <p className="evidence-note">Generic entries such as “All Other Streets” are excluded. Every result keeps its RDO, order, effectivity, sheet, and source-row evidence.</p>
         </section>
       )}
