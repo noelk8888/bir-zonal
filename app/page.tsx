@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 type AppIndex = {
   datasetCapturedAt: string;
@@ -28,7 +28,7 @@ type ZonalRecord = {
   sheet: string;
 };
 
-type CheckChange = { rdo: string; reason: string; downloadUrl?: string };
+type CheckChange = { rdo: string; reason: string; downloadUrl?: string; records?: number };
 
 const FIFTEEN_DAYS = 15 * 24 * 60 * 60 * 1000;
 const BIR_PAGE = "https://www.bir.gov.ph/zonal-values";
@@ -84,9 +84,21 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatEffectivityDate(value: string) {
+  if (!value) return "Not stated";
+  const normalized = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+  const parsed = normalized ? new Date(`${normalized}T00:00:00`) : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("en-PH", { dateStyle: "long" }).format(parsed);
+}
+
 function workbookLabel(record: ZonalRecord) {
   const office = record.rdo.replace(/^RDO\s+No\.\s*/i, "").replace(/^(\d+[A-Z]?)-/, "$1 - ");
   return `RDO No. ${office}`;
+}
+
+function rdoKey(value: string) {
+  return value.match(/RDO\s*(?:No\.?\s*)?([0-9]+[A-Za-z]?)/i)?.[1]?.toUpperCase() ?? value.replace(/\W+/g, "").toLowerCase();
 }
 
 export default function Home() {
@@ -98,6 +110,7 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [results, setResults] = useState<ZonalRecord[]>([]);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
+  const [clock, setClock] = useState<number | null>(null);
   const [checking, setChecking] = useState(false);
   const [checkProgress, setCheckProgress] = useState("");
   const [checkMessage, setCheckMessage] = useState("");
@@ -112,13 +125,19 @@ export default function Home() {
       .then((payload: AppIndex) => setIndex(payload))
       .catch((error: Error) => setMessage(error.message))
       .finally(() => setLoadingData(false));
-    setLastChecked(window.localStorage.getItem("bir-zonal-last-checked"));
+    const refreshClock = () => {
+      setLastChecked(window.localStorage.getItem("bir-zonal-last-checked"));
+      setClock(Date.now());
+    };
+    const initial = window.setTimeout(refreshClock, 0);
+    const interval = window.setInterval(() => setClock(Date.now()), 60_000);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(interval);
+    };
   }, []);
 
-  const updateIsDue = useMemo(() => {
-    if (!lastChecked) return true;
-    return Date.now() - new Date(lastChecked).getTime() >= FIFTEEN_DAYS;
-  }, [lastChecked]);
+  const updateIsDue = !lastChecked || clock === null || clock - new Date(lastChecked).getTime() >= FIFTEEN_DAYS;
 
   async function search(event: FormEvent) {
     event.preventDefault();
@@ -144,7 +163,15 @@ export default function Home() {
       const shard = index.cities[city].shard;
       const response = await fetch(`/data/shard-${shard}.json`);
       if (!response.ok) throw new Error("The matching BIR data file could not be loaded.");
-      const records = await response.json() as ZonalRecord[];
+      const baselineRecords = await response.json() as ZonalRecord[];
+      const updateResponse = await fetch(`/api/bir/overrides?city=${encodeURIComponent(city)}`);
+      const updatePayload = await updateResponse.json() as { updatedRdos?: string[]; records?: ZonalRecord[]; error?: string };
+      if (!updateResponse.ok) throw new Error(updatePayload.error || "The updated BIR data could not be loaded.");
+      const overridden = new Set(updatePayload.updatedRdos ?? []);
+      const records = [
+        ...baselineRecords.filter((record) => !overridden.has(rdoKey(record.rdo))),
+        ...(updatePayload.records ?? []),
+      ];
       const requestedBarangay = barangayKey(parsed.barangay);
       const requestedStreet = streetKey(parsed.street);
       const matches = records.filter((record) =>
@@ -179,9 +206,14 @@ export default function Home() {
       const checkedAt = new Date().toISOString();
       window.localStorage.setItem("bir-zonal-last-checked", checkedAt);
       setLastChecked(checkedAt);
+      setClock(new Date(checkedAt).getTime());
       setChanges(found);
+      if (found.length) {
+        setResults([]);
+        setSearched(false);
+      }
       setCheckMessage(found.length
-        ? `${found.length} official BIR file change${found.length === 1 ? "" : "s"} detected.`
+        ? `${found.length} official BIR file change${found.length === 1 ? "" : "s"} installed. Search results now use the updated files.`
         : "No BIR changes found. Your reference is current.");
     } catch (error) {
       setCheckMessage(error instanceof Error ? error.message : "The BIR update check failed.");
@@ -223,6 +255,7 @@ export default function Home() {
           <small>Last checked: {formatDate(lastChecked)}</small>
           {checkProgress && <div className="check-progress">{checkProgress}</div>}
           {checkMessage && <div className={`check-message ${changes.length ? "warning" : "success"}`}>{checkMessage}</div>}
+          {changes.length > 0 && <ul className="change-list">{changes.map((change) => <li key={`${change.rdo}-${change.reason}`}><strong>{change.rdo}</strong><span>{change.reason}{change.records ? ` · ${change.records.toLocaleString()} records` : ""}</span></li>)}</ul>}
         </aside>
       </section>
 
@@ -241,7 +274,7 @@ export default function Home() {
                     <div><dt>Revenue Region</dt><dd>{record.rr}</dd></div>
                     <div><dt>Revenue District Office</dt><dd>{record.rdo}</dd></div>
                     <div><dt>Department Order</dt><dd>No. {record.do || "Not stated"}</dd></div>
-                    <div><dt>Effectivity Date</dt><dd>{record.ed || "Not stated"}</dd></div>
+                    <div><dt>Effectivity Date</dt><dd>{formatEffectivityDate(record.ed)}</dd></div>
                     <div><dt>Source Sheet</dt><dd>{record.sheet}</dd></div>
                     <div><dt>Source Row</dt><dd>{record.vals.map((value) => value.row).join(", ")}</dd></div>
                     <div><dt>Source Workbook</dt><dd>{workbookLabel(record)}</dd></div>

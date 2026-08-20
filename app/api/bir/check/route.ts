@@ -1,3 +1,13 @@
+import { normalizeOfficialWorkbook, type LiveWorkbookEntry } from "@/lib/bir-workbook";
+import {
+  deleteRdoRecords,
+  getUpdatesBucket,
+  readUpdateManifest,
+  recordsKeyForRdo,
+  writeRdoRecords,
+  writeUpdateManifest,
+} from "@/lib/bir-updates";
+
 const SOURCE_PAGE = "https://www.bir.gov.ph/zonal-values";
 const CMS_BASE = "https://bir-cms-ws.bir.gov.ph";
 
@@ -11,6 +21,8 @@ type BaselineEntry = {
 type LiveEntry = {
   revenueRegion: string;
   rdoName: string;
+  province: string;
+  details: string;
   downloadUrl: string;
 };
 
@@ -94,20 +106,24 @@ async function liveEntriesForRegion(code: string): Promise<LiveEntry[]> {
       if (Number(row.is_active ?? 1) !== 1) continue;
       const content = (row.content ?? {}) as Record<string, unknown>;
       const rdoName = decodeHtml(String(content.RDO ?? row.keyword_field_1 ?? ""));
+      const province = decodeHtml(String(content.Province ?? row.keyword_field_2 ?? "")).replace(/^Province:\s*/i, "");
+      const details = decodeHtml(String(content.Municipalities ?? content.Municities ?? content.Municipality ?? ""));
       const downloadUrl = candidateDownload(content);
-      if (rdoName && downloadUrl) entries.push({ revenueRegion: feed.name, rdoName, downloadUrl });
+      if (rdoName && downloadUrl) entries.push({ revenueRegion: feed.name, rdoName, province, details, downloadUrl });
     }
   }
   return entries;
 }
 
-async function sha256(url: string) {
+async function downloadOfficialFile(url: string) {
   const parsed = new URL(url);
   if (parsed.hostname !== "bir-cdn.bir.gov.ph") throw new Error("Refusing a non-BIR download URL");
   const response = await fetch(url, { headers: { "user-agent": "KiuRealty-BIR-ZonalValues-App/1.0" } });
   if (!response.ok) throw new Error(`Official BIR file returned ${response.status}`);
-  const digest = await crypto.subtle.digest("SHA-256", await response.arrayBuffer());
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const payload = new Uint8Array(await response.arrayBuffer());
+  const digest = await crypto.subtle.digest("SHA-256", payload);
+  const sha256 = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return { payload, sha256 };
 }
 
 export async function GET(request: Request) {
@@ -123,24 +139,73 @@ export async function GET(request: Request) {
     const baselineByRdo = new Map(baselineRegion.map((entry) => [rdoKey(entry.rdo_name), entry]));
     const live = await liveEntriesForRegion(code);
     const liveByRdo = new Map(live.map((entry) => [rdoKey(entry.rdoName), entry]));
-    const changed: Array<{ rdo: string; reason: string; downloadUrl?: string }> = [];
+    const bucket = getUpdatesBucket();
+    const manifest = await readUpdateManifest(bucket);
+    const changed: Array<{ rdo: string; reason: string; downloadUrl?: string; records?: number }> = [];
 
-    for (let index = 0; index < live.length; index += 3) {
-      const batch = live.slice(index, index + 3);
-      const comparisons = await Promise.all(batch.map(async (entry) => {
-        const previous = baselineByRdo.get(rdoKey(entry.rdoName));
-        if (!previous) return { rdo: entry.rdoName, reason: "new", downloadUrl: entry.downloadUrl };
-        const currentHash = await sha256(entry.downloadUrl);
-        if (currentHash !== previous.sha256) return { rdo: entry.rdoName, reason: "file changed", downloadUrl: entry.downloadUrl };
-        if (entry.downloadUrl !== previous.download_url) return { rdo: entry.rdoName, reason: "link changed", downloadUrl: entry.downloadUrl };
-        return null;
-      }));
-      changed.push(...comparisons.filter((item): item is NonNullable<typeof item> => item !== null));
+    for (const entry of live) {
+      const key = rdoKey(entry.rdoName);
+      const baselineEntry = baselineByRdo.get(key);
+      const priorUpdate = manifest.rdos[key];
+      const { payload, sha256 } = await downloadOfficialFile(entry.downloadUrl);
+      const matchesBaseline = baselineEntry?.sha256 === sha256 && baselineEntry.download_url === entry.downloadUrl;
+      const matchesUpdate = !priorUpdate?.removed && priorUpdate?.sha256 === sha256 && priorUpdate.downloadUrl === entry.downloadUrl;
+      if (matchesUpdate || (matchesBaseline && !priorUpdate)) continue;
+
+      if (matchesBaseline) {
+        await deleteRdoRecords(priorUpdate?.recordsKey ?? null, bucket);
+        delete manifest.rdos[key];
+        changed.push({ rdo: entry.rdoName, reason: "returned to the published baseline", downloadUrl: entry.downloadUrl });
+        continue;
+      }
+
+      const workbookEntry: LiveWorkbookEntry = entry;
+      const records = normalizeOfficialWorkbook(payload, workbookEntry);
+      if (!records.length) throw new Error(`${entry.rdoName} changed, but no searchable current rows could be extracted.`);
+      const recordsKey = recordsKeyForRdo(key);
+      await writeRdoRecords(recordsKey, records, bucket);
+      const now = new Date().toISOString();
+      manifest.rdos[key] = {
+        sha256,
+        downloadUrl: entry.downloadUrl,
+        rdoName: entry.rdoName,
+        rdoNumber: records[0]?.rno ?? key,
+        revenueRegion: entry.revenueRegion,
+        regionCode: code,
+        recordsKey,
+        cities: [...new Set(records.map((record) => record.c).filter(Boolean))].sort(),
+        recordCount: records.length,
+        removed: false,
+        updatedAt: now,
+      };
+      changed.push({
+        rdo: entry.rdoName,
+        reason: baselineEntry ? "updated and installed" : "new and installed",
+        downloadUrl: entry.downloadUrl,
+        records: records.length,
+      });
     }
 
     for (const [key, entry] of baselineByRdo) {
-      if (!liveByRdo.has(key)) changed.push({ rdo: entry.rdo_name, reason: "removed from current BIR catalog" });
+      if (liveByRdo.has(key) || manifest.rdos[key]?.removed) continue;
+      await deleteRdoRecords(manifest.rdos[key]?.recordsKey ?? null, bucket);
+      manifest.rdos[key] = {
+        sha256: "",
+        downloadUrl: "",
+        rdoName: entry.rdo_name,
+        rdoNumber: key,
+        revenueRegion: entry.revenue_region,
+        regionCode: code,
+        recordsKey: null,
+        cities: [],
+        recordCount: 0,
+        removed: true,
+        updatedAt: new Date().toISOString(),
+      };
+      changed.push({ rdo: entry.rdo_name, reason: "removed from the current BIR catalog" });
     }
+
+    if (changed.length) await writeUpdateManifest(manifest, bucket);
 
     return Response.json({
       checkedAt: new Date().toISOString(),
@@ -148,6 +213,7 @@ export async function GET(request: Request) {
       rdoCount: live.length,
       changed,
       updatesAvailable: changed.length > 0,
+      installed: changed.filter((entry) => entry.reason.includes("installed")).length,
     });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "BIR check failed" }, { status: 502 });

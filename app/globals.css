@@ -53,6 +53,9 @@ button, input { font: inherit; }
 .check-message { margin-top: 14px; padding: 11px; border-radius: 9px; font-size: 12px; font-weight: 700; }
 .check-message.success { color: #087f5b; background: #e6fcf5; }
 .check-message.warning { color: #9c4c00; background: #fff4e6; }
+.change-list { display: grid; gap: 9px; margin: 13px 0 0; padding: 0; list-style: none; text-align: left; }
+.change-list li { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.18); border-radius: 10px; background: rgba(255,255,255,.08); font-size: 12px; }
+.change-list span { color: rgba(255,255,255,.72); }
 .result-preview { display: grid; grid-template-columns: 1.2fr 1fr; gap: 30px; width: min(1180px, calc(100% - 48px)); margin: 0 auto 56px; padding: 32px; }
 .result-preview h2 { max-width: 520px; font-size: clamp(26px, 3vw, 38px); letter-spacing: -1.2px; }
 .classification-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(142px, 1fr)); gap: 12px; min-width: min(100%, 320px); }
