@@ -227,6 +227,15 @@ export default function Home() {
 
   const updateIsDue = !lastChecked || clock === null || clock - new Date(lastChecked).getTime() >= FIFTEEN_DAYS;
 
+  function resetSearch() {
+    setAddress("");
+    setResults([]);
+    setMessage("");
+    setSearched(false);
+    setSearchMode(null);
+    window.requestAnimationFrame(() => document.getElementById("address")?.focus());
+  }
+
   async function search(event: FormEvent) {
     event.preventDefault();
     setSearched(true);
@@ -332,6 +341,7 @@ export default function Home() {
           <form className="search-form" onSubmit={search}>
             <label htmlFor="address">Complete address</label>
             <div className="search-row">
+              <button className="reset-button" type="button" onClick={resetSearch}>Reset</button>
               <input id="address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="e.g. Shang Salcedo Place, Makati City" autoComplete="street-address" />
               <button type="submit" disabled={searching || loadingData}>{searching ? "Searching…" : "Search zonal value"}</button>
             </div>
