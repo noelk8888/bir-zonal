@@ -17,10 +17,20 @@ export async function GET(request: Request) {
       throw error;
     }
     const entries = Object.entries(manifest.rdos);
-    const updatedRdos = entries.map(([rdo]) => rdo);
     const relevant = entries.filter(([, entry]) => !entry.removed && entry.recordsKey && entry.cities.some((candidate) => key(candidate) === city));
-    const records = (await Promise.all(relevant.map(([, entry]) => readRdoRecords(entry.recordsKey!)))).flat();
-    return Response.json({ updatedRdos, records, updatedAt: manifest.updatedAt });
+    const loaded = await Promise.all(relevant.map(async ([rdo, entry]) => ({
+      rdo,
+      records: await readRdoRecords(entry.recordsKey!),
+    })));
+    // An update may cover several cities. Only replace a bundled RDO when the
+    // refreshed records actually include the city being searched. This keeps a
+    // partial refresh from hiding an otherwise valid current bundled record.
+    const applicable = loaded.filter(({ records }) => records.some((record) => key(record.c) === city));
+    return Response.json({
+      updatedRdos: applicable.map(({ rdo }) => rdo),
+      records: applicable.flatMap(({ records }) => records),
+      updatedAt: manifest.updatedAt,
+    });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Updated BIR data could not be loaded." }, { status: 500 });
   }
