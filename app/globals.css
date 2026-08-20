@@ -85,7 +85,7 @@ button, input { font: inherit; }
 .details-grid { display: grid; grid-template-columns: repeat(5, 1fr); margin: 0; border-top: 1px solid var(--line); }
 .details-grid div { min-width: 0; padding: 15px 17px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .details-grid dt { margin-bottom: 5px; color: var(--muted); font-size: 20px; font-weight: 800; text-transform: uppercase; letter-spacing: .65px; }
-.details-grid dd { margin: 0; overflow-wrap: anywhere; font-size: 26px; font-weight: 700; line-height: 1.35; }
+.details-grid dd { margin: 0; overflow-wrap: anywhere; font-size: 28px; font-weight: 700; line-height: 1.35; }
 .details-grid a, .not-found a, .change-panel a, footer a { color: #b83a0b; }
 .not-found { display: flex; justify-content: space-between; gap: 18px; align-items: center; padding: 24px; background: #fff4e6; border: 1px solid #ffd8a8; border-radius: 16px; }
 .change-panel { padding: 28px; background: #fff4e6; border: 1px solid #ffd8a8; border-radius: 18px; }
