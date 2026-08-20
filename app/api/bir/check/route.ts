@@ -237,22 +237,19 @@ function requestRegion(request: Request) {
   return code;
 }
 
+function decodeCatalog(value: string) {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  const bytes = Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+}
+
 export async function GET(request: Request) {
   try {
     const code = requestRegion(request);
     if (!code) return Response.json({ error: "A valid Revenue Region code is required" }, { status: 400 });
-    return await checkRegion(request, code, await liveEntriesForRegion(code));
-  } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "BIR check failed" }, { status: 502 });
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    const code = requestRegion(request);
-    if (!code) return Response.json({ error: "A valid Revenue Region code is required" }, { status: 400 });
-    const payload = await request.json() as { entries?: unknown };
-    return await checkRegion(request, code, validateLiveEntries(payload.entries, code));
+    const catalog = new URL(request.url).searchParams.get("catalog");
+    const live = catalog ? validateLiveEntries(decodeCatalog(catalog), code) : await liveEntriesForRegion(code);
+    return await checkRegion(request, code, live);
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "BIR check failed" }, { status: 502 });
   }

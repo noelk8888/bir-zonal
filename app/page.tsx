@@ -139,6 +139,13 @@ function candidateDownload(content: Record<string, unknown>) {
   return candidates.sort((a, b) => b.priority - a.priority || a.url.localeCompare(b.url))[0]?.url;
 }
 
+function encodeCatalog(entries: LiveEntry[]) {
+  const bytes = new TextEncoder().encode(JSON.stringify(entries));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 async function liveEntriesForRegion(revenueRegion: string, datasetIds: string[]) {
   if (!datasetIds.length) throw new Error(`${revenueRegion} has no registered official BIR feed.`);
   const byRdo = new Map<string, LiveEntry>();
@@ -157,7 +164,8 @@ async function liveEntriesForRegion(revenueRegion: string, datasetIds: string[])
       const content = (row.content ?? {}) as Record<string, unknown>;
       const rdoName = decodeHtml(String(content.RDO ?? row.keyword_field_1 ?? ""));
       const province = decodeHtml(String(content.Province ?? row.keyword_field_2 ?? "")).replace(/^Province:\s*/i, "");
-      const details = decodeHtml(String(content.Municipalities ?? content.Municities ?? content.Municipality ?? ""));
+      const fullDetails = decodeHtml(String(content.Municipalities ?? content.Municities ?? content.Municipality ?? ""));
+      const details = fullDetails.match(/Department\s+Order(?:\s+No\.?)?\s*[0-9]{1,3}\s*[-–]\s*[0-9]{2,4}/i)?.[0] ?? "";
       const downloadUrl = candidateDownload(content);
       if (!rdoName || !downloadUrl) continue;
       const entry = { revenueRegion, rdoName, province, details, downloadUrl };
@@ -269,11 +277,8 @@ export default function Home() {
         const region = index.regionCodes[position];
         setCheckProgress(`Checking Revenue Region ${region} · ${position + 1} of ${index.regionCodes.length}`);
         const entries = await liveEntriesForRegion(index.regions[region] ?? `Revenue Region ${region}`, index.regionFeeds[region] ?? []);
-        const response = await fetch(`/api/bir/check?region=${encodeURIComponent(region)}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ entries }),
-        });
+        const catalog = encodeCatalog(entries);
+        const response = await fetch(`/api/bir/check?region=${encodeURIComponent(region)}&catalog=${encodeURIComponent(catalog)}`);
         const payload = await response.json() as { changed?: CheckChange[]; error?: string };
         if (!response.ok) throw new Error(payload.error || `Revenue Region ${region} could not be checked.`);
         found.push(...(payload.changed ?? []));
