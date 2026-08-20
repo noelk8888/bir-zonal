@@ -103,11 +103,6 @@ function formatEffectivityDate(value: string) {
   return new Intl.DateTimeFormat("en-PH", { dateStyle: "long" }).format(parsed);
 }
 
-function workbookLabel(record: ZonalRecord) {
-  const office = record.rdo.replace(/^RDO\s+No\.\s*/i, "").replace(/^(\d+[A-Z]?)-/, "$1 - ");
-  return `RDO No. ${office}`;
-}
-
 function rdoKey(value: string) {
   return value.match(/RDO\s*(?:No\.?\s*)?([0-9]+[A-Za-z]?)/i)?.[1]?.toUpperCase() ?? value.replace(/\W+/g, "").toLowerCase();
 }
@@ -370,11 +365,9 @@ export default function Home() {
                     <div><dt>Barangay</dt><dd>{record.b}</dd></div>
                     <div><dt>Revenue Region</dt><dd>{record.rr}</dd></div>
                     <div><dt>Revenue District Office</dt><dd>{record.rdo}</dd></div>
-                    <div><dt>Department Order</dt><dd>No. {record.do || "Not stated"}</dd></div>
                     <div><dt>Effectivity Date</dt><dd>{formatEffectivityDate(record.ed)}</dd></div>
                     <div><dt>Source Sheet</dt><dd>{record.sheet}</dd></div>
                     <div><dt>Source Row</dt><dd>{record.vals.map((value) => value.row).join(", ")}</dd></div>
-                    <div><dt>Source Workbook</dt><dd>{workbookLabel(record)}</dd></div>
                     <div><dt>BIR page fallback</dt><dd><a href={BIR_PAGE} target="_blank" rel="noreferrer">Open official BIR zonal-values page</a></dd></div>
                   </dl>
                 </article>
