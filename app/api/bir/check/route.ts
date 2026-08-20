@@ -175,7 +175,7 @@ async function checkRegion(code: string, live: LiveEntry[]) {
   try { bucket = getUpdatesBucket(); } catch { /* Vercel uses check-only mode. */ }
   const manifest = bucket
     ? await readUpdateManifest(bucket)
-    : { version: 1 as const, updatedAt: null, rdos: {} };
+    : { version: 1 as const, updatedAt: null, lastCheckedAt: null, rdos: {} };
   const changed: Array<{ rdo: string; reason: string; downloadUrl?: string; records?: number }> = [];
 
   for (const entry of liveByRdo.values()) {

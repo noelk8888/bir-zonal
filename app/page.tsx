@@ -203,8 +203,15 @@ export default function Home() {
       .then((payload: AppIndex) => setIndex(payload))
       .catch((error: Error) => setMessage(error.message))
       .finally(() => setLoadingData(false));
-    const refreshClock = () => {
-      setLastChecked(window.localStorage.getItem("bir-zonal-last-checked"));
+    const refreshClock = async () => {
+      const deviceTime = window.localStorage.getItem("bir-zonal-last-checked");
+      try {
+        const response = await fetch("/api/bir/status");
+        const payload = await response.json() as { lastCheckedAt?: string | null };
+        setLastChecked(payload.lastCheckedAt ?? deviceTime);
+      } catch {
+        setLastChecked(deviceTime);
+      }
       setClock(Date.now());
     };
     const initial = window.setTimeout(refreshClock, 0);
@@ -285,7 +292,14 @@ export default function Home() {
         if (payload.storageMode === "check-only") installsUpdates = false;
         found.push(...(payload.changed ?? []));
       }
-      const checkedAt = new Date().toISOString();
+      let checkedAt = new Date().toISOString();
+      try {
+        const statusResponse = await fetch("/api/bir/status", { method: "POST" });
+        const status = await statusResponse.json() as { lastCheckedAt?: string | null };
+        if (statusResponse.ok && status.lastCheckedAt) checkedAt = status.lastCheckedAt;
+      } catch {
+        // Keep a device-local timestamp only if the shared store is unavailable.
+      }
       window.localStorage.setItem("bir-zonal-last-checked", checkedAt);
       setLastChecked(checkedAt);
       setClock(new Date(checkedAt).getTime());

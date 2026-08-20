@@ -19,6 +19,7 @@ export type UpdateManifestEntry = {
 export type UpdateManifest = {
   version: 1;
   updatedAt: string | null;
+  lastCheckedAt: string | null;
   rdos: Record<string, UpdateManifestEntry>;
 };
 
@@ -44,10 +45,10 @@ export function getUpdatesBucket() {
 
 export async function readUpdateManifest(bucket = getUpdatesBucket()): Promise<UpdateManifest> {
   const object = await bucket.get(MANIFEST_KEY);
-  if (!object) return { version: 1, updatedAt: null, rdos: {} };
-  const parsed = JSON.parse(await object.text()) as UpdateManifest;
+  if (!object) return { version: 1, updatedAt: null, lastCheckedAt: null, rdos: {} };
+  const parsed = JSON.parse(await object.text()) as Partial<UpdateManifest>;
   if (parsed.version !== 1 || !parsed.rdos) throw new Error("The BIR update manifest is invalid.");
-  return parsed;
+  return { version: 1, updatedAt: parsed.updatedAt ?? null, lastCheckedAt: parsed.lastCheckedAt ?? null, rdos: parsed.rdos };
 }
 
 export async function writeUpdateManifest(manifest: UpdateManifest, bucket = getUpdatesBucket()) {
@@ -55,6 +56,13 @@ export async function writeUpdateManifest(manifest: UpdateManifest, bucket = get
   await bucket.put(MANIFEST_KEY, JSON.stringify(manifest), {
     httpMetadata: { contentType: "application/json; charset=utf-8" },
   });
+}
+
+export async function recordCompletedUpdateCheck(bucket = getUpdatesBucket()) {
+  const manifest = await readUpdateManifest(bucket);
+  manifest.lastCheckedAt = new Date().toISOString();
+  await writeUpdateManifest(manifest, bucket);
+  return manifest.lastCheckedAt;
 }
 
 export function recordsKeyForRdo(rdoKey: string) {
