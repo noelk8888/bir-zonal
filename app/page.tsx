@@ -192,7 +192,6 @@ export default function Home() {
   const [checking, setChecking] = useState(false);
   const [checkProgress, setCheckProgress] = useState("");
   const [checkMessage, setCheckMessage] = useState("");
-  const [changes, setChanges] = useState<CheckChange[]>([]);
 
   useEffect(() => {
     fetch("/data/index.json")
@@ -276,10 +275,8 @@ export default function Home() {
   async function checkForUpdates() {
     if (!index || checking) return;
     setChecking(true);
-    setChanges([]);
     setCheckMessage("");
     const found: CheckChange[] = [];
-    let installsUpdates = true;
     try {
       for (let position = 0; position < index.regionCodes.length; position += 1) {
         const region = index.regionCodes[position];
@@ -287,9 +284,8 @@ export default function Home() {
         const entries = await liveEntriesForRegion(index.regions[region] ?? `Revenue Region ${region}`, index.regionFeeds[region] ?? []);
         const catalog = encodeCatalog(entries);
         const response = await fetch(`/api/bir/check?region=${encodeURIComponent(region)}&catalog=${encodeURIComponent(catalog)}`);
-        const payload = await response.json() as { changed?: CheckChange[]; error?: string; storageMode?: "installed" | "check-only" };
+        const payload = await response.json() as { changed?: CheckChange[]; error?: string };
         if (!response.ok) throw new Error(payload.error || `Revenue Region ${region} could not be checked.`);
-        if (payload.storageMode === "check-only") installsUpdates = false;
         found.push(...(payload.changed ?? []));
       }
       let checkedAt = new Date().toISOString();
@@ -303,16 +299,10 @@ export default function Home() {
       window.localStorage.setItem("bir-zonal-last-checked", checkedAt);
       setLastChecked(checkedAt);
       setClock(new Date(checkedAt).getTime());
-      setChanges(found);
       if (found.length) {
         setResults([]);
         setSearched(false);
       }
-      setCheckMessage(found.length
-        ? installsUpdates
-          ? `${found.length} official BIR file change${found.length === 1 ? "" : "s"} installed. Search results now use the updated files.`
-          : `${found.length} official BIR file change${found.length === 1 ? "" : "s"} detected. Search still uses the bundled reference until the app is refreshed.`
-        : "No BIR changes found. Your reference is current.");
     } catch (error) {
       setCheckMessage(error instanceof Error ? error.message : "The BIR update check failed.");
     } finally {
@@ -352,8 +342,7 @@ export default function Home() {
           <button className="update-button" type="button" onClick={checkForUpdates} disabled={checking || !index}>{checking ? "Checking official files…" : "Check for BIR updates"}</button>
           <small>Last checked: {formatDate(lastChecked)}</small>
           {checkProgress && <div className="check-progress">{checkProgress}</div>}
-          {checkMessage && <div className={`check-message ${changes.length ? "warning" : "success"}`}>{checkMessage}</div>}
-          {changes.length > 0 && <ul className="change-list">{changes.map((change) => <li key={`${change.rdo}-${change.reason}`}><strong>{change.rdo}</strong><span>{change.reason}{change.records ? ` · ${change.records.toLocaleString()} records` : ""}</span></li>)}</ul>}
+          {checkMessage && <div className="check-message warning">{checkMessage}</div>}
         </aside>
       </section>
 
@@ -392,8 +381,6 @@ export default function Home() {
           <p className="evidence-note">Generic entries such as “All Other Streets” are excluded. Every result keeps its RDO, order, effectivity, sheet, and source-row evidence.</p>
         </section>
       )}
-
-      {changes.length > 0 && <section className="change-panel"><h2>Official changes detected</h2><p>The affected RDO files are listed below. Their official download links are preserved for verification.</p><ul>{changes.map((change) => <li key={`${change.rdo}-${change.reason}`}><strong>{change.rdo}</strong> — {change.reason}{change.downloadUrl && <> · <a href={change.downloadUrl} target="_blank" rel="noreferrer">official file</a></>}</li>)}</ul></section>}
 
       <footer><span>Dataset captured: {index?.datasetCapturedAt ? formatDate(index.datasetCapturedAt) : "Loading…"}</span><a href={BIR_PAGE} target="_blank" rel="noreferrer">Bureau of Internal Revenue zonal values</a></footer>
     </main>
