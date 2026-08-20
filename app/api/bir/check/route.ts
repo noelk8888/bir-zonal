@@ -1,4 +1,5 @@
 import { normalizeOfficialWorkbook, type LiveWorkbookEntry } from "@/lib/bir-workbook";
+import baselineCatalog from "@/public/data/catalog-baseline.json";
 import {
   deleteRdoRecords,
   getUpdatesBucket,
@@ -165,9 +166,8 @@ async function downloadOfficialFile(url: string) {
   throw new Error(lastError);
 }
 
-async function checkRegion(request: Request, code: string, live: LiveEntry[]) {
-  const baselineResponse = await fetch(new URL("/data/catalog-baseline.json", request.url));
-  const baseline = await baselineResponse.json() as BaselineEntry[];
+async function checkRegion(code: string, live: LiveEntry[]) {
+  const baseline = baselineCatalog as BaselineEntry[];
   const baselineRegion = baseline.filter((entry) => regionCode(entry.revenue_region) === code);
   const baselineByRdo = new Map(baselineRegion.map((entry) => [rdoKey(entry.rdo_name), entry]));
   const liveByRdo = new Map(live.map((entry) => [rdoKey(entry.rdoName), entry]));
@@ -249,7 +249,7 @@ export async function GET(request: Request) {
     if (!code) return Response.json({ error: "A valid Revenue Region code is required" }, { status: 400 });
     const catalog = new URL(request.url).searchParams.get("catalog");
     const live = catalog ? validateLiveEntries(decodeCatalog(catalog), code) : await liveEntriesForRegion(code);
-    return await checkRegion(request, code, live);
+    return await checkRegion(code, live);
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "BIR check failed" }, { status: 502 });
   }
