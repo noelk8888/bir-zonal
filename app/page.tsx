@@ -77,8 +77,8 @@ function parseSearchInput(value: string): SearchInput | null {
 
 function resolveCities(input: string, cities: AppIndex["cities"]) {
   const cityBase = (value: string) => key(value)
-    .replace(/^(city|municipality)s+ofs+/, "")
-    .replace(/s+(city|municipality)$/, "")
+    .replace(/^(city|municipality)\s+of\s+/, "")
+    .replace(/\s+(city|municipality)$/, "")
     .trim();
   const requested = cityBase(input);
   const cityKeys = Object.keys(cities);

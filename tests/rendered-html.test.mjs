@@ -112,6 +112,12 @@ test("general city searches cover BIR city divisions and condominium-name aliase
   assert.equal(propertyNameMatches("BLUE RESIDENCES (SMDC)", "Blue Residence"), false);
 });
 
+test("the live city parser accepts a city suffix", async () => {
+  const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(pageSource, /replace\(\/\^\(city\|municipality\)\\s\+of\\s\+\//);
+  assert.match(pageSource, /replace\(\/\\s\+\(city\|municipality\)\$\//);
+});
+
 test("condominium searches work after the correct city files are selected", async () => {
   const dataRoot = new URL("../public/data/", import.meta.url);
   const index = JSON.parse(await readFile(new URL("index.json", dataRoot), "utf8"));
