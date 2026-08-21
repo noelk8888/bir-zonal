@@ -40,7 +40,22 @@ const worker = {
       }, allowedWidths);
     }
 
-    return handler.fetch(request, env, ctx);
+    const response = await handler.fetch(request, env, ctx);
+
+    // The app shell must always point to the latest hashed client bundle. The
+    // BIR data itself is fetched separately with cache-busting URLs, so this
+    // avoids a stale browser shell without disabling normal asset caching.
+    if (request.method === "GET" && url.pathname === "/") {
+      const headers = new Headers(response.headers);
+      headers.set("Cache-Control", "no-store, max-age=0");
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    }
+
+    return response;
   },
 };
 
