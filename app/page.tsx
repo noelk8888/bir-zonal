@@ -222,7 +222,7 @@ export default function Home() {
   const [checkMessage, setCheckMessage] = useState("");
 
   useEffect(() => {
-    fetch("/data/index.json")
+    fetch(`/data/index.json?fresh=${Date.now()}`, { cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error("The BIR search index could not be loaded.");
         return response.json();
@@ -297,12 +297,12 @@ export default function Home() {
     try {
       const shards = [...new Set(cities.map((city) => index.cities[city].shard))];
       const baselineRecords = (await Promise.all(shards.map(async (shard) => {
-        const response = await fetch(`/data/shard-${shard}.json`);
+        const response = await fetch(`/data/shard-${shard}.json?fresh=${Date.now()}`, { cache: "no-store" });
         if (!response.ok) throw new Error("The matching BIR data file could not be loaded.");
         return response.json() as Promise<ZonalRecord[]>;
       }))).flat();
       const updatePayloads = await Promise.all(cities.map(async (city) => {
-        const response = await fetch(`/api/bir/overrides?city=${encodeURIComponent(city)}`);
+        const response = await fetch(`/api/bir/overrides?city=${encodeURIComponent(city)}&fresh=${Date.now()}`, { cache: "no-store" });
         const payload = await response.json() as { updatedRdos?: string[]; records?: ZonalRecord[]; error?: string };
         if (!response.ok) throw new Error(payload.error || "The updated BIR data could not be loaded.");
         return payload;

@@ -1,5 +1,9 @@
 import { readRdoRecords, readUpdateManifest } from "@/lib/bir-updates";
 
+export const dynamic = "force-dynamic";
+
+const noStoreHeaders = { "Cache-Control": "private, no-store, max-age=0" };
+
 function key(value: string) {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
@@ -7,12 +11,12 @@ function key(value: string) {
 export async function GET(request: Request) {
   try {
     const city = key(new URL(request.url).searchParams.get("city") ?? "");
-    if (!city) return Response.json({ error: "A city is required." }, { status: 400 });
+    if (!city) return Response.json({ error: "A city is required." }, { status: 400, headers: noStoreHeaders });
     let manifest;
     try { manifest = await readUpdateManifest(); }
     catch (error) {
       if (error instanceof Error && error.message === "The BIR update store is unavailable.") {
-        return Response.json({ updatedRdos: [], records: [], updatedAt: null, storageMode: "baseline" });
+        return Response.json({ updatedRdos: [], records: [], updatedAt: null, storageMode: "baseline" }, { headers: noStoreHeaders });
       }
       throw error;
     }
@@ -30,8 +34,8 @@ export async function GET(request: Request) {
       updatedRdos: applicable.map(({ rdo }) => rdo),
       records: applicable.flatMap(({ records }) => records),
       updatedAt: manifest.updatedAt,
-    });
+    }, { headers: noStoreHeaders });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Updated BIR data could not be loaded." }, { status: 500 });
+    return Response.json({ error: error instanceof Error ? error.message : "Updated BIR data could not be loaded." }, { status: 500, headers: noStoreHeaders });
   }
 }
