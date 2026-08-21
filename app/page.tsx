@@ -209,6 +209,11 @@ async function liveEntriesForRegion(revenueRegion: string, datasetIds: string[])
 
 export default function Home() {
   const [address, setAddress] = useState("");
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const savedTheme = window.localStorage.getItem("bir-zonal-theme");
+    return savedTheme === "dark" || (savedTheme !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  });
   const [index, setIndex] = useState<AppIndex | null>(null);
   const [loadingData, setLoadingData] = useState(true);
   const [searching, setSearching] = useState(false);
@@ -221,6 +226,14 @@ export default function Home() {
   const [checking, setChecking] = useState(false);
   const [checkProgress, setCheckProgress] = useState("");
   const [checkMessage, setCheckMessage] = useState("");
+
+  function toggleDarkMode() {
+    setDarkMode((current) => {
+      const next = !current;
+      window.localStorage.setItem("bir-zonal-theme", next ? "dark" : "light");
+      return next;
+    });
+  }
 
   useEffect(() => {
     fetch(`/data/index.json?fresh=${Date.now()}`, { cache: "no-store" })
@@ -378,11 +391,17 @@ export default function Home() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${darkMode ? "dark-mode" : ""}`}>
       <header className="topbar">
         <div className="brand-mark" aria-label="BIR Zonal Values"><strong>BIR</strong><span>ZONAL</span></div>
         <div className="brand-copy"><p>Official property valuation reference</p><h1>BIR Zonal Values</h1></div>
-        <div className="status-pill"><span /> {loadingData ? "Loading current reference" : `${index?.records.toLocaleString() ?? 0} exact street records`}</div>
+        <div className="topbar-actions">
+          <button className="theme-toggle" type="button" onClick={toggleDarkMode} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>
+            <span aria-hidden="true">{darkMode ? "☀" : "☾"}</span>
+            {darkMode ? "Light mode" : "Dark mode"}
+          </button>
+          <div className="status-pill"><span /> {loadingData ? "Loading current reference" : `${index?.records.toLocaleString() ?? 0} exact street records`}</div>
+        </div>
       </header>
 
       <section className="workspace">
