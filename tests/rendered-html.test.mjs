@@ -105,11 +105,21 @@ test("general city searches cover BIR city divisions and condominium-name aliase
   assert.deepEqual(cityGroup("San Juan City", index.cities), ["san juan"]);
   const records = JSON.parse(await readFile(new URL(`shard-${index.cities["south quezon city"].shard}.json`, dataRoot), "utf8"));
   const match = records.find((record) =>
-    normalize(record.c) === "south quezon city" && propertyNameMatches(record.s, "Blue Residences")
+    propertyNameMatches(record.s, "Blue Residences")
   );
   assert.equal(match?.s, "BLUE RESIDENCES (SMDC)");
   assert.equal(match?.b, "LOYOLA HEIGHTS");
   assert.equal(propertyNameMatches("BLUE RESIDENCES (SMDC)", "Blue Residence"), false);
+});
+
+test("condominium searches work after the correct city files are selected", async () => {
+  const dataRoot = new URL("../public/data/", import.meta.url);
+  const index = JSON.parse(await readFile(new URL("index.json", dataRoot), "utf8"));
+  const cities = cityGroup("San Juan City", index.cities);
+  const records = JSON.parse(await readFile(new URL(`shard-${index.cities[cities[0]].shard}.json`, dataRoot), "utf8"));
+  const match = records.find((record) => propertyNameMatches(record.s, "The Viridian in Greenhills"));
+  assert.equal(cities[0], "san juan");
+  assert.equal(match?.s, "THE VIRIDIAN IN GREENHILLS");
 });
 
 test("generic street fallbacks are absent from app search data", async () => {

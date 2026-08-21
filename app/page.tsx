@@ -319,7 +319,10 @@ export default function Home() {
           barangayKey(record.b) === barangayKey(parsed.barangay) &&
           streetKey(record.s) === streetKey(parsed.street)
         )
-        : records.filter((record) => cities.includes(key(record.c)) && propertyNameMatches(record.s, parsed.name));
+        // The files above are already limited to the selected city group. Do
+        // not apply a second city-label check here: BIR workbooks sometimes
+        // label the same city differently (for example, San Juan vs. San Juan City).
+        : records.filter((record) => propertyNameMatches(record.s, parsed.name));
       if (!matches.length) setMessage("Can not be found. Try to search manually.");
       else setResults(matches);
     } catch (error) {
