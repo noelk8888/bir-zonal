@@ -125,6 +125,12 @@ function rdoKey(value: string) {
   return value.match(/RDO\s*(?:No\.?\s*)?([0-9]+[A-Za-z]?)/i)?.[1]?.toUpperCase() ?? value.replace(/\W+/g, "").toLowerCase();
 }
 
+function officialRowKey(record: ZonalRecord) {
+  // An RDO refresh can be incomplete for a particular city. Match individual
+  // official rows, rather than suppressing every bundled row from that RDO.
+  return [rdoKey(record.rdo), key(record.b), key(record.s), key(record.v)].join("|");
+}
+
 function decodeHtml(value: string) {
   return value.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&nbsp;/g, " ").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, " ").trim();
 }
@@ -301,10 +307,11 @@ export default function Home() {
         if (!response.ok) throw new Error(payload.error || "The updated BIR data could not be loaded.");
         return payload;
       }));
-      const overridden = new Set(updatePayloads.flatMap((payload) => payload.updatedRdos ?? []));
+      const refreshedRecords = updatePayloads.flatMap((payload) => payload.records ?? []);
+      const refreshedRowKeys = new Set(refreshedRecords.map(officialRowKey));
       const records = [
-        ...baselineRecords.filter((record) => !overridden.has(rdoKey(record.rdo))),
-        ...updatePayloads.flatMap((payload) => payload.records ?? []),
+        ...refreshedRecords,
+        ...baselineRecords.filter((record) => !refreshedRowKeys.has(officialRowKey(record))),
       ];
       const matches = parsed.mode === "address"
         ? records.filter((record) =>

@@ -47,6 +47,14 @@ function propertyNameMatches(officialName, requestedName) {
   return nameVariants(officialName).some((official) => requestedVariants.has(official));
 }
 
+function rdoNumber(value) {
+  return value.match(/RDO\s*(?:No\.?\s*)?([0-9]+[A-Za-z]?)/i)?.[1]?.toUpperCase() ?? value.replace(/\W+/g, "").toLowerCase();
+}
+
+function officialRowKey(record) {
+  return [rdoNumber(record.rdo), normalize(record.b), normalize(record.s), normalize(record.v)].join("|");
+}
+
 async function search(city, brgy, streetName) {
   const dataRoot = new URL("../public/data/", import.meta.url);
   const index = JSON.parse(await readFile(new URL("index.json", dataRoot), "utf8"));
@@ -110,4 +118,13 @@ test("generic street fallbacks are absent from app search data", async () => {
   assert.ok(index.genericRowsExcluded > 90000);
   const sampleShard = JSON.parse(await readFile(new URL("shard-d5.json", dataRoot), "utf8"));
   assert.equal(sampleShard.some((record) => /all other|remaining street|remaining lot/i.test(`${record.s} ${record.v}`)), false);
+});
+
+test("a partial RDO refresh does not hide unrelated bundled condominium rows", async () => {
+  const rows = JSON.parse(await readFile(new URL("../public/data/shard-6e.json", import.meta.url), "utf8"));
+  const viridian = rows.find((record) => record.s === "THE VIRIDIAN IN GREENHILLS");
+  const refreshed = [{ ...viridian, s: "A DIFFERENT OFFICIAL ROW", v: "CONNECTICUT" }];
+  const refreshedKeys = new Set(refreshed.map(officialRowKey));
+  const merged = [...refreshed, ...rows.filter((record) => !refreshedKeys.has(officialRowKey(record)))];
+  assert.ok(merged.some((record) => record.s === "THE VIRIDIAN IN GREENHILLS"));
 });
