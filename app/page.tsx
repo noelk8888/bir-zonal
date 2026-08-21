@@ -358,7 +358,9 @@ export default function Home() {
           <form className="search-form" onSubmit={search}>
             <label htmlFor="address">Complete address</label>
             <div className="search-row">
-              <button className="reset-button" type="button" onClick={resetSearch}>Reset</button>
+              <button className="reset-button" type="button" onClick={resetSearch} aria-label="Reset search" title="Reset search">
+                <span aria-hidden="true">↻</span>
+              </button>
               <input id="address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="e.g. Shang Salcedo Place, Makati City" autoComplete="street-address" />
               <button type="submit" disabled={searching || loadingData}>{searching ? "Searching…" : "Search zonal value"}</button>
             </div>
