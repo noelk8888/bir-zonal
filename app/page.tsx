@@ -323,10 +323,6 @@ export default function Home() {
         // not apply a second city-label check here: BIR workbooks sometimes
         // label the same city differently (for example, San Juan vs. San Juan City).
         : records.filter((record) => propertyNameMatches(record.s, parsed.name));
-      if (new URLSearchParams(window.location.search).has("trace")) {
-        setMessage(`Trace: city files ${cities.join(", ") || "none"}; bundled rows ${baselineRecords.length}; refreshed rows ${refreshedRecords.length}; matches ${matches.length}.`);
-        return;
-      }
       if (!matches.length) setMessage("Can not be found. Try to search manually.");
       else setResults(matches);
     } catch (error) {
