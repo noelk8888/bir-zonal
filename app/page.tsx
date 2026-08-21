@@ -323,6 +323,13 @@ export default function Home() {
         // not apply a second city-label check here: BIR workbooks sometimes
         // label the same city differently (for example, San Juan vs. San Juan City).
         : records.filter((record) => propertyNameMatches(record.s, parsed.name));
+      console.info("BIR zonal lookup", {
+        mode: parsed.mode,
+        cities,
+        baselineRecords: baselineRecords.length,
+        refreshedRecords: refreshedRecords.length,
+        matches: matches.length,
+      });
       if (!matches.length) setMessage("Can not be found. Try to search manually.");
       else setResults(matches);
     } catch (error) {
