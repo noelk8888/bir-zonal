@@ -35,6 +35,7 @@ type LiveEntry = { revenueRegion: string; rdoName: string; province: string; det
 
 const FIFTEEN_DAYS = 15 * 24 * 60 * 60 * 1000;
 const BIR_PAGE = "https://www.bir.gov.ph/zonal-values";
+const CONDOMINIUM_INDEX = "/data/condominium-index-20260821.json";
 
 function key(value: string) {
   return value
@@ -313,16 +314,21 @@ export default function Home() {
         ...refreshedRecords,
         ...baselineRecords.filter((record) => !refreshedRowKeys.has(officialRowKey(record))),
       ];
-      const matches = parsed.mode === "address"
-        ? records.filter((record) =>
+      let matches: ZonalRecord[];
+      if (parsed.mode === "address") {
+        matches = records.filter((record) =>
           cities.includes(key(record.c)) &&
           barangayKey(record.b) === barangayKey(parsed.barangay) &&
           streetKey(record.s) === streetKey(parsed.street)
-        )
-        // The files above are already limited to the selected city group. Do
-        // not apply a second city-label check here: BIR workbooks sometimes
-        // label the same city differently (for example, San Juan vs. San Juan City).
-        : records.filter((record) => propertyNameMatches(record.s, parsed.name));
+        );
+      } else {
+        const response = await fetch(`${CONDOMINIUM_INDEX}?fresh=${Date.now()}`, { cache: "no-store" });
+        if (!response.ok) throw new Error("The condominium search index could not be loaded.");
+        const condominiums = await response.json() as ZonalRecord[];
+        matches = condominiums.filter((record) =>
+          cities.includes(key(record.c)) && propertyNameMatches(record.s, parsed.name)
+        );
+      }
       if (!matches.length) setMessage("Can not be found. Try to search manually.");
       else setResults(matches);
     } catch (error) {

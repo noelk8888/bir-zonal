@@ -116,10 +116,11 @@ test("condominium searches work after the correct city files are selected", asyn
   const dataRoot = new URL("../public/data/", import.meta.url);
   const index = JSON.parse(await readFile(new URL("index.json", dataRoot), "utf8"));
   const cities = cityGroup("San Juan City", index.cities);
-  const records = JSON.parse(await readFile(new URL(`shard-${index.cities[cities[0]].shard}.json`, dataRoot), "utf8"));
+  const records = JSON.parse(await readFile(new URL("condominium-index-20260821.json", dataRoot), "utf8"));
   const match = records.find((record) => propertyNameMatches(record.s, "The Viridian in Greenhills"));
   assert.equal(cities[0], "san juan");
   assert.equal(match?.s, "THE VIRIDIAN IN GREENHILLS");
+  assert.equal(match?.c, "San Juan");
 });
 
 test("generic street fallbacks are absent from app search data", async () => {
