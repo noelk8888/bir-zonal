@@ -37,32 +37,9 @@ function nameVariants(value) {
   return [...new Set([normalize(value), normalize(value.replace(/\([^)]*\)/g, " "))])].filter(Boolean);
 }
 
-function stringSimilarity(left, right) {
-  if (left === right) return 1;
-  if (!left || !right) return 0;
-  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
-  for (let row = 1; row <= left.length; row += 1) {
-    let diagonal = previous[0];
-    previous[0] = row;
-    for (let column = 1; column <= right.length; column += 1) {
-      const above = previous[column];
-      previous[column] = Math.min(previous[column] + 1, previous[column - 1] + 1, diagonal + (left[row - 1] === right[column - 1] ? 0 : 1));
-      diagonal = above;
-    }
-  }
-  return 1 - previous[right.length] / Math.max(left.length, right.length);
-}
-
 function propertyNameMatches(officialName, requestedName) {
-  return nameVariants(requestedName).some((requested) => {
-    const requestedTokens = [...new Set(requested.split(" "))];
-    if (requestedTokens.length < 2) return false;
-    return nameVariants(officialName).some((official) => {
-      const officialTokens = new Set(official.split(" "));
-      const tokenScore = requestedTokens.filter((token) => officialTokens.has(token)).length / Math.max(requestedTokens.length, officialTokens.size);
-      return Math.max(tokenScore, stringSimilarity(official, requested)) >= 0.7;
-    });
-  });
+  const requestedVariants = new Set(nameVariants(requestedName));
+  return nameVariants(officialName).some((official) => requestedVariants.has(official));
 }
 
 async function search(city, brgy, streetName) {
@@ -118,6 +95,7 @@ test("general city searches cover BIR city divisions and condominium-name aliase
   );
   assert.equal(match?.s, "BLUE RESIDENCES (SMDC)");
   assert.equal(match?.b, "LOYOLA HEIGHTS");
+  assert.equal(propertyNameMatches("BLUE RESIDENCES (SMDC)", "Blue Residence"), false);
 });
 
 test("generic street fallbacks are absent from app search data", async () => {

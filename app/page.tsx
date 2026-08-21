@@ -89,39 +89,9 @@ function nameVariants(value: string) {
   return [...new Set([key(value), key(value.replace(/\([^)]*\)/g, " "))])].filter(Boolean);
 }
 
-function stringSimilarity(left: string, right: string) {
-  if (left === right) return 1;
-  if (!left || !right) return 0;
-  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
-  for (let row = 1; row <= left.length; row += 1) {
-    let diagonal = previous[0];
-    previous[0] = row;
-    for (let column = 1; column <= right.length; column += 1) {
-      const above = previous[column];
-      previous[column] = Math.min(
-        previous[column] + 1,
-        previous[column - 1] + 1,
-        diagonal + (left[row - 1] === right[column - 1] ? 0 : 1),
-      );
-      diagonal = above;
-    }
-  }
-  return 1 - previous[right.length] / Math.max(left.length, right.length);
-}
-
 function propertyNameMatches(officialName: string, requestedName: string) {
-  const requestedVariants = nameVariants(requestedName);
-  const officialVariants = nameVariants(officialName);
-  return requestedVariants.some((requested) => {
-    const requestedTokens = [...new Set(requested.split(" "))];
-    if (requestedTokens.length < 2) return false;
-    return officialVariants.some((official) => {
-      const officialTokens = new Set(official.split(" "));
-      const tokenScore = requestedTokens.filter((token) => officialTokens.has(token)).length
-        / Math.max(requestedTokens.length, officialTokens.size);
-      return Math.max(tokenScore, stringSimilarity(official, requested)) >= 0.7;
-    });
-  });
+  const requestedVariants = new Set(nameVariants(requestedName));
+  return nameVariants(officialName).some((official) => requestedVariants.has(official));
 }
 
 function formatMoney(value: number) {
@@ -384,7 +354,7 @@ export default function Home() {
         <div className="search-panel">
           <p className="eyebrow">Exact address lookup</p>
           <h2>Find the official zonal value.</h2>
-          <p className="lede">For streets, matching is always City → Barangay → Street. For a condominium, enter its name and city; the app resolves its official barangay and accepts a 70% name match.</p>
+          <p className="lede">For streets, matching is always City → Barangay → Street. For a condominium, enter its official name and city; the app resolves its official barangay and searches all BIR city divisions.</p>
           <form className="search-form" onSubmit={search}>
             <label htmlFor="address">Complete address</label>
             <div className="search-row">
@@ -392,7 +362,7 @@ export default function Home() {
               <input id="address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="e.g. Shang Salcedo Place, Makati City" autoComplete="street-address" />
               <button type="submit" disabled={searching || loadingData}>{searching ? "Searching…" : "Search zonal value"}</button>
             </div>
-            <p className="input-help">Street: Street + Barangay + City. Condominium: name + City (70% match accepted). Vicinity is never used as a match.</p>
+            <p className="input-help">Street: Street + Barangay + City. Condominium: exact official name + City. Harmless labels such as “(SMDC)” may be omitted. Vicinity is never used as a match.</p>
           </form>
         </div>
 
@@ -416,7 +386,7 @@ export default function Home() {
             <div className="result-list">
               {results.map((record, recordIndex) => (
                 <article className="result-card" key={`${record.rno}-${record.sheet}-${record.v}-${recordIndex}`}>
-                  <div className="result-card-head"><div><span className="match-badge">{searchMode === "name" ? "Condominium/name match (70%+)" : "Exact street match"}</span><h3>{record.s}</h3><p>Vicinity: {record.v || "Not stated"}</p></div><div className="classification-grid">{record.vals.map((value) => <div key={`${value.cl}-${value.row}`}><span>{value.cl}</span><strong>{formatMoney(value.zv)}</strong><small>per square meter</small></div>)}</div></div>
+                  <div className="result-card-head"><div><span className="match-badge">{searchMode === "name" ? "Exact condominium/name match" : "Exact street match"}</span><h3>{record.s}</h3><p>Vicinity: {record.v || "Not stated"}</p></div><div className="classification-grid">{record.vals.map((value) => <div key={`${value.cl}-${value.row}`}><span>{value.cl}</span><strong>{formatMoney(value.zv)}</strong><small>per square meter</small></div>)}</div></div>
                   <dl className="details-grid">
                     <div><dt>City/Municipality</dt><dd>{record.c}</dd></div>
                     <div><dt>Barangay</dt><dd>{record.b}</dd></div>
