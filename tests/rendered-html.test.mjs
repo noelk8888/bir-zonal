@@ -25,6 +25,46 @@ function street(value) {
   return normalize(value).replace(/\b(street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr)\b$/, "").trim();
 }
 
+function cityGroup(city, cities) {
+  const requested = normalize(city);
+  const canonical = requested.endsWith(" city") ? requested : `${requested} city`;
+  const keys = Object.keys(cities);
+  const exact = keys.find((candidate) => candidate === requested || candidate === canonical);
+  return exact ? keys.filter((candidate) => candidate === exact || candidate.endsWith(` ${exact}`)) : [];
+}
+
+function nameVariants(value) {
+  return [...new Set([normalize(value), normalize(value.replace(/\([^)]*\)/g, " "))])].filter(Boolean);
+}
+
+function stringSimilarity(left, right) {
+  if (left === right) return 1;
+  if (!left || !right) return 0;
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let row = 1; row <= left.length; row += 1) {
+    let diagonal = previous[0];
+    previous[0] = row;
+    for (let column = 1; column <= right.length; column += 1) {
+      const above = previous[column];
+      previous[column] = Math.min(previous[column] + 1, previous[column - 1] + 1, diagonal + (left[row - 1] === right[column - 1] ? 0 : 1));
+      diagonal = above;
+    }
+  }
+  return 1 - previous[right.length] / Math.max(left.length, right.length);
+}
+
+function propertyNameMatches(officialName, requestedName) {
+  return nameVariants(requestedName).some((requested) => {
+    const requestedTokens = [...new Set(requested.split(" "))];
+    if (requestedTokens.length < 2) return false;
+    return nameVariants(officialName).some((official) => {
+      const officialTokens = new Set(official.split(" "));
+      const tokenScore = requestedTokens.filter((token) => officialTokens.has(token)).length / Math.max(requestedTokens.length, officialTokens.size);
+      return Math.max(tokenScore, stringSimilarity(official, requested)) >= 0.7;
+    });
+  });
+}
+
 async function search(city, brgy, streetName) {
   const dataRoot = new URL("../public/data/", import.meta.url);
   const index = JSON.parse(await readFile(new URL("index.json", dataRoot), "utf8"));
@@ -65,6 +105,19 @@ test("strict Quezon City lookup uses the street field and current sheet", async 
   assert.equal(matches[0].s, "PREMIUM");
   assert.deepEqual(matches[0].vals, [{ cl: "RR", zv: 44000, row: 1945 }]);
   assert.equal(matches[0].sheet, "Sheet 8 (DO 033-2024)");
+});
+
+test("general city searches cover BIR city divisions and condominium-name aliases", async () => {
+  const dataRoot = new URL("../public/data/", import.meta.url);
+  const index = JSON.parse(await readFile(new URL("index.json", dataRoot), "utf8"));
+  const cities = cityGroup("Quezon City", index.cities);
+  assert.ok(cities.includes("south quezon city"));
+  const records = JSON.parse(await readFile(new URL(`shard-${index.cities["south quezon city"].shard}.json`, dataRoot), "utf8"));
+  const match = records.find((record) =>
+    normalize(record.c) === "south quezon city" && propertyNameMatches(record.s, "Blue Residences")
+  );
+  assert.equal(match?.s, "BLUE RESIDENCES (SMDC)");
+  assert.equal(match?.b, "LOYOLA HEIGHTS");
 });
 
 test("generic street fallbacks are absent from app search data", async () => {

@@ -74,12 +74,54 @@ function parseSearchInput(value: string): SearchInput | null {
   return null;
 }
 
-function resolveCity(input: string, cities: AppIndex["cities"]) {
-  const exact = key(input);
-  if (cities[exact]) return exact;
-  const withoutCity = exact.replace(/\s+city$/, "");
-  const candidates = Object.keys(cities).filter((candidate) => candidate.replace(/\s+city$/, "") === withoutCity);
-  return candidates.length === 1 ? candidates[0] : null;
+function resolveCities(input: string, cities: AppIndex["cities"]) {
+  const requested = key(input);
+  const canonical = requested.endsWith(" city") ? requested : `${requested} city`;
+  const cityKeys = Object.keys(cities);
+  const exact = cityKeys.find((candidate) => candidate === requested || candidate === canonical);
+  if (!exact) return [];
+  // The BIR sometimes splits one city between files labelled North, South,
+  // Cubao, Novaliches, etc. A general city input must search every such file.
+  return cityKeys.filter((candidate) => candidate === exact || candidate.endsWith(` ${exact}`));
+}
+
+function nameVariants(value: string) {
+  return [...new Set([key(value), key(value.replace(/\([^)]*\)/g, " "))])].filter(Boolean);
+}
+
+function stringSimilarity(left: string, right: string) {
+  if (left === right) return 1;
+  if (!left || !right) return 0;
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let row = 1; row <= left.length; row += 1) {
+    let diagonal = previous[0];
+    previous[0] = row;
+    for (let column = 1; column <= right.length; column += 1) {
+      const above = previous[column];
+      previous[column] = Math.min(
+        previous[column] + 1,
+        previous[column - 1] + 1,
+        diagonal + (left[row - 1] === right[column - 1] ? 0 : 1),
+      );
+      diagonal = above;
+    }
+  }
+  return 1 - previous[right.length] / Math.max(left.length, right.length);
+}
+
+function propertyNameMatches(officialName: string, requestedName: string) {
+  const requestedVariants = nameVariants(requestedName);
+  const officialVariants = nameVariants(officialName);
+  return requestedVariants.some((requested) => {
+    const requestedTokens = [...new Set(requested.split(" "))];
+    if (requestedTokens.length < 2) return false;
+    return officialVariants.some((official) => {
+      const officialTokens = new Set(official.split(" "));
+      const tokenScore = requestedTokens.filter((token) => officialTokens.has(token)).length
+        / Math.max(requestedTokens.length, officialTokens.size);
+      return Math.max(tokenScore, stringSimilarity(official, requested)) >= 0.7;
+    });
+  });
 }
 
 function formatMoney(value: number) {
@@ -251,32 +293,37 @@ export default function Home() {
       return;
     }
     setSearchMode(parsed.mode);
-    const city = resolveCity(parsed.city, index.cities);
-    if (!city) {
+    const cities = resolveCities(parsed.city, index.cities);
+    if (!cities.length) {
       setMessage("Can not be found. Try to search manually.");
       return;
     }
     setSearching(true);
     try {
-      const shard = index.cities[city].shard;
-      const response = await fetch(`/data/shard-${shard}.json`);
-      if (!response.ok) throw new Error("The matching BIR data file could not be loaded.");
-      const baselineRecords = await response.json() as ZonalRecord[];
-      const updateResponse = await fetch(`/api/bir/overrides?city=${encodeURIComponent(city)}`);
-      const updatePayload = await updateResponse.json() as { updatedRdos?: string[]; records?: ZonalRecord[]; error?: string };
-      if (!updateResponse.ok) throw new Error(updatePayload.error || "The updated BIR data could not be loaded.");
-      const overridden = new Set(updatePayload.updatedRdos ?? []);
+      const shards = [...new Set(cities.map((city) => index.cities[city].shard))];
+      const baselineRecords = (await Promise.all(shards.map(async (shard) => {
+        const response = await fetch(`/data/shard-${shard}.json`);
+        if (!response.ok) throw new Error("The matching BIR data file could not be loaded.");
+        return response.json() as Promise<ZonalRecord[]>;
+      }))).flat();
+      const updatePayloads = await Promise.all(cities.map(async (city) => {
+        const response = await fetch(`/api/bir/overrides?city=${encodeURIComponent(city)}`);
+        const payload = await response.json() as { updatedRdos?: string[]; records?: ZonalRecord[]; error?: string };
+        if (!response.ok) throw new Error(payload.error || "The updated BIR data could not be loaded.");
+        return payload;
+      }));
+      const overridden = new Set(updatePayloads.flatMap((payload) => payload.updatedRdos ?? []));
       const records = [
         ...baselineRecords.filter((record) => !overridden.has(rdoKey(record.rdo))),
-        ...(updatePayload.records ?? []),
+        ...updatePayloads.flatMap((payload) => payload.records ?? []),
       ];
       const matches = parsed.mode === "address"
         ? records.filter((record) =>
-          key(record.c) === city &&
+          cities.includes(key(record.c)) &&
           barangayKey(record.b) === barangayKey(parsed.barangay) &&
           streetKey(record.s) === streetKey(parsed.street)
         )
-        : records.filter((record) => key(record.c) === city && streetKey(record.s) === streetKey(parsed.name));
+        : records.filter((record) => cities.includes(key(record.c)) && propertyNameMatches(record.s, parsed.name));
       if (!matches.length) setMessage("Can not be found. Try to search manually.");
       else setResults(matches);
     } catch (error) {
@@ -337,7 +384,7 @@ export default function Home() {
         <div className="search-panel">
           <p className="eyebrow">Exact address lookup</p>
           <h2>Find the official zonal value.</h2>
-          <p className="lede">For streets, matching is always City → Barangay → Street. For a condominium, enter its official name and city; the app resolves its official barangay.</p>
+          <p className="lede">For streets, matching is always City → Barangay → Street. For a condominium, enter its name and city; the app resolves its official barangay and accepts a 70% name match.</p>
           <form className="search-form" onSubmit={search}>
             <label htmlFor="address">Complete address</label>
             <div className="search-row">
@@ -345,7 +392,7 @@ export default function Home() {
               <input id="address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="e.g. Shang Salcedo Place, Makati City" autoComplete="street-address" />
               <button type="submit" disabled={searching || loadingData}>{searching ? "Searching…" : "Search zonal value"}</button>
             </div>
-            <p className="input-help">Street: Street + Barangay + City. Condominium: official condominium name + City. Vicinity is never used as a match.</p>
+            <p className="input-help">Street: Street + Barangay + City. Condominium: name + City (70% match accepted). Vicinity is never used as a match.</p>
           </form>
         </div>
 
@@ -369,7 +416,7 @@ export default function Home() {
             <div className="result-list">
               {results.map((record, recordIndex) => (
                 <article className="result-card" key={`${record.rno}-${record.sheet}-${record.v}-${recordIndex}`}>
-                  <div className="result-card-head"><div><span className="match-badge">{searchMode === "name" ? "Exact condominium/name match" : "Exact street match"}</span><h3>{record.s}</h3><p>Vicinity: {record.v || "Not stated"}</p></div><div className="classification-grid">{record.vals.map((value) => <div key={`${value.cl}-${value.row}`}><span>{value.cl}</span><strong>{formatMoney(value.zv)}</strong><small>per square meter</small></div>)}</div></div>
+                  <div className="result-card-head"><div><span className="match-badge">{searchMode === "name" ? "Condominium/name match (70%+)" : "Exact street match"}</span><h3>{record.s}</h3><p>Vicinity: {record.v || "Not stated"}</p></div><div className="classification-grid">{record.vals.map((value) => <div key={`${value.cl}-${value.row}`}><span>{value.cl}</span><strong>{formatMoney(value.zv)}</strong><small>per square meter</small></div>)}</div></div>
                   <dl className="details-grid">
                     <div><dt>City/Municipality</dt><dd>{record.c}</dd></div>
                     <div><dt>Barangay</dt><dd>{record.b}</dd></div>
