@@ -51,8 +51,8 @@ button, input { font: inherit; }
 .search-row input { min-width: 0; padding: 17px 18px; color: var(--ink); background: #fbfcfb; border: 1px solid #b7c1c7; border-radius: 12px; outline: none; }
 .dark-mode .search-row input { background: #121a1f; border-color: #52636d; }
 .search-row input:focus { border-color: var(--orange); box-shadow: 0 0 0 4px #ff671d22; }
-.search-row button, .update-button { padding: 0 22px; color: white; background: var(--orange); border: 0; border-radius: 12px; font-weight: 800; cursor: pointer; }
-.search-row button:hover, .update-button:hover { background: var(--orange-dark); }
+.search-row button, .update-button { padding: 0 22px; color: #14212b; background: #ffbd59; border: 0; border-radius: 12px; font-weight: 800; cursor: pointer; }
+.search-row button:hover, .update-button:hover { background: #e5a847; }
 .search-row .reset-button { display: grid; place-items: center; width: 56px; min-width: 56px; padding: 0; color: var(--orange-dark); background: #fff8f3; border: 1px solid #ffb58f; }
 .search-row .reset-button span { display: block; font-size: 32px; font-weight: 400; line-height: 1; transition: transform .2s ease; }
 .search-row .reset-button:hover { color: white; background: var(--orange); border-color: var(--orange); }
