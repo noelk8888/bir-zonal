@@ -442,7 +442,7 @@ export default function Home() {
         </section>
       )}
 
-      <footer><span>Dataset captured: {index?.datasetCapturedAt ? formatDate(index.datasetCapturedAt) : "Loading…"}</span><a href={BIR_PAGE} target="_blank" rel="noreferrer">Bureau of Internal Revenue zonal values</a></footer>
+      <footer><span>Dataset captured: {index?.datasetCapturedAt ? formatDate(index.datasetCapturedAt) : "Loading…"}</span><a href={BIR_PAGE} target="_blank" rel="noreferrer">Source: BIR website</a></footer>
     </main>
   );
 }

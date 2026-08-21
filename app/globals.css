@@ -96,9 +96,14 @@ button, input { font: inherit; }
 footer { display: flex; justify-content: space-between; gap: 18px; width: min(1180px, calc(100% - 48px)); margin: 0 auto; padding: 24px 0 40px; color: var(--muted); border-top: 1px solid var(--line); font-size: 12px; }
 
 @media (max-width: 820px) {
+  .app-shell { display: flex; flex-direction: column; }
   .topbar { grid-template-columns: auto 1fr; padding: 16px 20px; }
   .status-pill { grid-column: 1 / -1; justify-self: start; }
-  .workspace { grid-template-columns: 1fr; width: min(100% - 28px, 680px); margin-top: 24px; }
+  .workspace { display: contents; }
+  .search-panel { order: 1; width: min(100% - 28px, 680px); margin: 24px auto 0; }
+  .update-card { order: 3; width: min(100% - 28px, 680px); margin: 0 auto 28px; }
+  .results-section, .result-preview, .change-panel { order: 2; }
+  footer { order: 4; }
   .result-preview { grid-template-columns: 1fr; width: min(100% - 28px, 680px); }
   .results-section, .change-panel { width: min(100% - 28px, 680px); }
   .result-card-head { grid-template-columns: 1fr; }
