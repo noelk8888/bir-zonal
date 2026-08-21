@@ -75,14 +75,20 @@ function parseSearchInput(value: string): SearchInput | null {
 }
 
 function resolveCities(input: string, cities: AppIndex["cities"]) {
-  const requested = key(input);
-  const canonical = requested.endsWith(" city") ? requested : `${requested} city`;
+  const cityBase = (value: string) => key(value)
+    .replace(/^(city|municipality)s+ofs+/, "")
+    .replace(/s+(city|municipality)$/, "")
+    .trim();
+  const requested = cityBase(input);
   const cityKeys = Object.keys(cities);
-  const exact = cityKeys.find((candidate) => candidate === requested || candidate === canonical);
-  if (!exact) return [];
+  const exact = cityKeys.find((candidate) => cityBase(candidate) === requested);
+  if (!exact || !requested) return [];
   // The BIR sometimes splits one city between files labelled North, South,
   // Cubao, Novaliches, etc. A general city input must search every such file.
-  return cityKeys.filter((candidate) => candidate === exact || candidate.endsWith(` ${exact}`));
+  return cityKeys.filter((candidate) => {
+    const candidateBase = cityBase(candidate);
+    return candidateBase === requested || candidateBase.endsWith(` ${requested}`);
+  });
 }
 
 function nameVariants(value: string) {
@@ -374,7 +380,12 @@ export default function Home() {
               <button className="reset-button" type="button" onClick={resetSearch} aria-label="Reset search" title="Reset search">
                 <span aria-hidden="true">↻</span>
               </button>
-              <input id="address" value={address} onChange={(event) => setAddress(event.target.value)} placeholder="e.g. Shang Salcedo Place, Makati City" autoComplete="street-address" />
+              <input id="address" value={address} onChange={(event) => setAddress(event.target.value)} onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }} placeholder="e.g. Shang Salcedo Place, Makati City" autoComplete="street-address" />
               <button type="submit" disabled={searching || loadingData}>{searching ? "Searching…" : "Search zonal value"}</button>
             </div>
             <p className="input-help">Street: Street + Barangay + City. Condominium: exact official name + City. Harmless labels such as “(SMDC)” may be omitted. Vicinity is never used as a match.</p>

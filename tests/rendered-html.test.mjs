@@ -26,11 +26,16 @@ function street(value) {
 }
 
 function cityGroup(city, cities) {
-  const requested = normalize(city);
-  const canonical = requested.endsWith(" city") ? requested : `${requested} city`;
+  const cityBase = (value) => normalize(value)
+    .replace(/^(city|municipality)\s+of\s+/, "")
+    .replace(/\s+(city|municipality)$/, "")
+    .trim();
+  const requested = cityBase(city);
   const keys = Object.keys(cities);
-  const exact = keys.find((candidate) => candidate === requested || candidate === canonical);
-  return exact ? keys.filter((candidate) => candidate === exact || candidate.endsWith(` ${exact}`)) : [];
+  const exact = keys.find((candidate) => cityBase(candidate) === requested);
+  return exact && requested
+    ? keys.filter((candidate) => cityBase(candidate) === requested || cityBase(candidate).endsWith(` ${requested}`))
+    : [];
 }
 
 function nameVariants(value) {
@@ -89,6 +94,7 @@ test("general city searches cover BIR city divisions and condominium-name aliase
   const index = JSON.parse(await readFile(new URL("index.json", dataRoot), "utf8"));
   const cities = cityGroup("Quezon City", index.cities);
   assert.ok(cities.includes("south quezon city"));
+  assert.deepEqual(cityGroup("San Juan City", index.cities), ["san juan"]);
   const records = JSON.parse(await readFile(new URL(`shard-${index.cities["south quezon city"].shard}.json`, dataRoot), "utf8"));
   const match = records.find((record) =>
     normalize(record.c) === "south quezon city" && propertyNameMatches(record.s, "Blue Residences")
