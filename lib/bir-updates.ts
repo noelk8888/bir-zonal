@@ -58,9 +58,12 @@ export async function writeUpdateManifest(manifest: UpdateManifest, bucket = get
   });
 }
 
-export async function recordCompletedUpdateCheck(bucket = getUpdatesBucket()) {
+export async function recordCompletedUpdateCheck(bucket = getUpdatesBucket(), completedAt = new Date().toISOString()) {
   const manifest = await readUpdateManifest(bucket);
-  manifest.lastCheckedAt = new Date().toISOString();
+  const requestedTime = new Date(completedAt).getTime();
+  if (!Number.isFinite(requestedTime)) throw new Error("The update-check timestamp is invalid.");
+  const existingTime = manifest.lastCheckedAt ? new Date(manifest.lastCheckedAt).getTime() : 0;
+  manifest.lastCheckedAt = new Date(Math.max(existingTime, requestedTime)).toISOString();
   await writeUpdateManifest(manifest, bucket);
   return manifest.lastCheckedAt;
 }

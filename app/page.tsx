@@ -221,9 +221,22 @@ export default function Home() {
     const refreshClock = async () => {
       const deviceTime = window.localStorage.getItem("bir-zonal-last-checked");
       try {
-        const response = await fetch("/api/bir/status");
+        const response = await fetch("/api/bir/status", { cache: "no-store" });
         const payload = await response.json() as { lastCheckedAt?: string | null };
-        setLastChecked(payload.lastCheckedAt ?? deviceTime);
+        let sharedTime = payload.lastCheckedAt ?? null;
+        if (response.ok && !sharedTime && deviceTime) {
+          const syncResponse = await fetch("/api/bir/status", {
+            method: "POST",
+            cache: "no-store",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lastCheckedAt: deviceTime }),
+          });
+          const synced = await syncResponse.json() as { lastCheckedAt?: string | null };
+          if (syncResponse.ok) sharedTime = synced.lastCheckedAt ?? null;
+        }
+        const resolvedTime = sharedTime ?? deviceTime;
+        if (resolvedTime) window.localStorage.setItem("bir-zonal-last-checked", resolvedTime);
+        setLastChecked(resolvedTime);
       } catch {
         setLastChecked(deviceTime);
       }
