@@ -86,12 +86,12 @@ function nearbyStreetMatches(records: ZonalRecord[], cities: string[], input: Ex
 }
 
 function nearbyNameMatches(records: ZonalRecord[], cities: string[], requestedName: string) {
-  const requested = key(requestedName);
+  const requested = comparisonName(requestedName);
   const requestedWords = new Set(requested.split(" ").filter(Boolean));
   const scored = records
     .filter((record) => cities.includes(key(record.c)))
     .map((record) => {
-      const candidate = key(record.s);
+      const candidate = comparisonName(record.s);
       const candidateWords = candidate.split(" ").filter(Boolean);
       const sharedWords = candidateWords.filter((word) => requestedWords.has(word)).length;
       const score = candidate.includes(requested) || requested.includes(candidate)
@@ -131,6 +131,9 @@ function resolveCities(input: string, cities: AppIndex["cities"]) {
   const cityBase = (value: string) => key(value)
     .replace(/^(city|municipality)\s+of\s+/, "")
     .replace(/\s+(city|municipality)$/, "")
+    // A few BIR sheets store a city without a word break (for example
+    // "MAKATICITY"). Treat it as the same city a user writes as "Makati City".
+    .replace(/\s+/g, "")
     .trim();
   const requested = cityBase(input);
   const cityKeys = Object.keys(cities);
@@ -153,7 +156,21 @@ function cityForSearch(value: string) {
 }
 
 function nameVariants(value: string) {
-  return [...new Set([key(value), key(value.replace(/\([^)]*\)/g, " "))])].filter(Boolean);
+  const variants = [key(value), key(value.replace(/\([^)]*\)/g, " "))];
+  for (const candidate of [...variants]) {
+    const simplified = candidate
+      .split(" ")
+      // BIR sometimes includes these suffixes although users commonly omit
+      // them, such as "Jazz Residences / SMDC" or "Sky Villas Condo".
+      .filter((word) => !["smdc", "condo", "condominium"].includes(word))
+      .join(" ");
+    variants.push(simplified);
+  }
+  return [...new Set(variants)].filter(Boolean);
+}
+
+function comparisonName(value: string) {
+  return nameVariants(value).sort((left, right) => left.length - right.length)[0] ?? "";
 }
 
 function propertyNameMatches(officialName: string, requestedName: string) {
