@@ -498,6 +498,7 @@ export default function Home() {
         <div className="brand-mark" aria-label="BIR Zonal Values"><strong>BIR</strong><span>ZONAL</span></div>
         <div className="brand-copy"><p>Official property valuation reference</p><h1>BIR Zonal Values</h1></div>
         <div className="topbar-actions">
+          <a className="tax-computation-link" href="https://taxcomputation.vercel.app/" target="_blank" rel="noreferrer">Tax Computation</a>
           <button className="theme-toggle" type="button" onClick={toggleDarkMode} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"}>
             <span aria-hidden="true">{darkMode ? "☀" : "☾"}</span>
             {darkMode ? "Light mode" : "Dark mode"}
