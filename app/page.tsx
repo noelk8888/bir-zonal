@@ -144,6 +144,14 @@ function resolveCities(input: string, cities: AppIndex["cities"]) {
   });
 }
 
+function cityForSearch(value: string) {
+  // The stored city can include an RDO division, for example
+  // "Cubao, Quezon City". The search field accepts the city itself; passing
+  // the division creates a third comma-separated part and cannot be parsed.
+  const parts = value.split(",").map((part) => part.trim()).filter(Boolean);
+  return parts.length > 1 ? parts.at(-1)! : value;
+}
+
 function nameVariants(value: string) {
   return [...new Set([key(value), key(value.replace(/\([^)]*\)/g, " "))])].filter(Boolean);
 }
@@ -417,7 +425,7 @@ export default function Home() {
   }
 
   function selectSuggestion(record: ZonalRecord) {
-    setAddress(record.vals.some(({ cl }) => ["RC", "CC", "PS"].includes(cl)) ? `${record.s}, ${record.c}` : `${record.s}, Brgy ${record.b}, ${record.c}`);
+    setAddress(record.vals.some(({ cl }) => ["RC", "CC", "PS"].includes(cl)) ? `${record.s}, ${cityForSearch(record.c)}` : `${record.s}, Brgy ${record.b}, ${cityForSearch(record.c)}`);
     setSuggestions([]);
     setMessage("Suggestion selected. Search to confirm the exact BIR result.");
     window.requestAnimationFrame(() => document.getElementById("address")?.focus());
