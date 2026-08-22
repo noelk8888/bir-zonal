@@ -47,7 +47,11 @@ function key(value: string) {
 }
 
 function barangayKey(value: string) {
-  return key(value).replace(/^(barangay|brgy|bgy|zone)\s*(no\s*)?/, "").trim();
+  return key(value)
+    .replace(/^(barangay|brgy|bgy|zone)\s*(no\s*)?/, "")
+    .replace(/^(sto|st)\s+/, "santo ")
+    .replace(/^sta\s+/, "santa ")
+    .trim();
 }
 
 function streetKey(value: string) {
