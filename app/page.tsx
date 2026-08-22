@@ -51,6 +51,9 @@ function barangayKey(value: string) {
     .replace(/^(barangay|brgy|bgy|zone)\s*(no\s*)?/, "")
     .replace(/^(sto|st)\s+/, "santo ")
     .replace(/^sta\s+/, "santa ")
+    // Continuation markers identify a repeated section in the BIR workbook;
+    // they are not part of the barangay name a person would search for.
+    .replace(/\s*\bcont(?:inuation)?\b\s*$/, "")
     .trim();
 }
 
