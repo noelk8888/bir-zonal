@@ -85,6 +85,29 @@ function nearbyStreetMatches(records: ZonalRecord[], cities: string[], input: Ex
   return [...unique.values()].slice(0, 5);
 }
 
+function nearbyNameMatches(records: ZonalRecord[], cities: string[], requestedName: string) {
+  const requested = key(requestedName);
+  const requestedWords = new Set(requested.split(" ").filter(Boolean));
+  const scored = records
+    .filter((record) => cities.includes(key(record.c)))
+    .map((record) => {
+      const candidate = key(record.s);
+      const candidateWords = candidate.split(" ").filter(Boolean);
+      const sharedWords = candidateWords.filter((word) => requestedWords.has(word)).length;
+      const score = candidate.includes(requested) || requested.includes(candidate)
+        ? 100 + sharedWords
+        : sharedWords / Math.max(requestedWords.size, candidateWords.length, 1);
+      return { record, score };
+    })
+    .filter(({ score }) => score > 0);
+  const unique = new Map<string, ZonalRecord>();
+  for (const { record } of scored.sort((a, b) => b.score - a.score || a.record.s.localeCompare(b.record.s))) {
+    const identity = `${record.c}\u0000${record.b}\u0000${record.s}`;
+    if (!unique.has(identity)) unique.set(identity, record);
+  }
+  return [...unique.values()].slice(0, 5);
+}
+
 type SearchInput =
   | { mode: "address"; street: string; barangay: string; city: string }
   | { mode: "name"; name: string; city: string };
@@ -363,6 +386,7 @@ export default function Home() {
         ...baselineRecords.filter((record) => !refreshedRowKeys.has(officialRowKey(record))),
       ];
       let matches: ZonalRecord[];
+      let condominiumRecords: ZonalRecord[] = [];
       if (parsed.mode === "address") {
         matches = records.filter((record) =>
           cities.includes(key(record.c)) &&
@@ -372,15 +396,17 @@ export default function Home() {
       } else {
         const response = await fetch(`${CONDOMINIUM_INDEX}?fresh=${Date.now()}`, { cache: "no-store" });
         if (!response.ok) throw new Error("The condominium search index could not be loaded.");
-        const condominiums = await response.json() as ZonalRecord[];
-        matches = condominiums.filter((record) =>
+        condominiumRecords = await response.json() as ZonalRecord[];
+        matches = condominiumRecords.filter((record) =>
           cities.includes(key(record.c)) && propertyNameMatches(record.s, parsed.name)
         );
       }
       if (!matches.length) {
-        const nearby = parsed.mode === "address" ? nearbyStreetMatches(records, cities, parsed) : [];
+        const nearby = parsed.mode === "address"
+          ? nearbyStreetMatches(records, cities, parsed)
+          : nearbyNameMatches(condominiumRecords, cities, parsed.name);
         setSuggestions(nearby);
-        setMessage(nearby.length ? "No exact match was found. Here are the closest BIR street names." : "Can not be found. Try to search manually.");
+        setMessage(nearby.length ? "No exact match was found. Here are the closest BIR names." : "Can not be found. Try to search manually.");
       }
       else setResults(matches);
     } catch (error) {
@@ -391,7 +417,7 @@ export default function Home() {
   }
 
   function selectSuggestion(record: ZonalRecord) {
-    setAddress(`${record.s}, Brgy ${record.b}, ${record.c}`);
+    setAddress(record.vals.some(({ cl }) => ["RC", "CC", "PS"].includes(cl)) ? `${record.s}, ${record.c}` : `${record.s}, Brgy ${record.b}, ${record.c}`);
     setSuggestions([]);
     setMessage("Suggestion selected. Search to confirm the exact BIR result.");
     window.requestAnimationFrame(() => document.getElementById("address")?.focus());
