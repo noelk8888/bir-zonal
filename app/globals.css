@@ -56,7 +56,8 @@ button, input { font: inherit; }
 .dark-mode .search-row button, .dark-mode .update-button { color: #14212b; background: white; }
 .dark-mode .search-row button:hover, .dark-mode .update-button:hover { background: #d9e0e4; }
 .search-row .reset-button { display: grid; place-items: center; width: 56px; min-width: 56px; padding: 0; color: white; background: var(--orange); border: 1px solid var(--orange); }
-.search-row .reset-button span { display: block; font-size: 32px; font-weight: 400; line-height: 1; transition: transform .2s ease; }
+.dark-mode .search-row .reset-button { color: white; background: var(--orange); border-color: var(--orange); }
+.search-row .reset-button span { display: block; font-size: 32px; font-weight: 900; line-height: 1; transition: transform .2s ease; }
 .search-row .reset-button:hover { color: white; background: var(--orange-dark); border-color: var(--orange-dark); }
 .search-row .reset-button:hover span { transform: rotate(-35deg); }
 .search-row .reset-button:focus-visible { outline: 3px solid #ff671d44; outline-offset: 3px; }
