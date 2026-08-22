@@ -521,7 +521,7 @@ export default function Home() {
 
       {searched && (
         <section className="results-section" aria-live="polite">
-          {message && <div className="not-found"><div><strong>{message}</strong>{suggestions.length > 0 && <div className="suggestion-list">{suggestions.map((record) => <button type="button" key={`${record.c}-${record.b}-${record.s}`} onClick={() => selectSuggestion(record)}><span>{record.s}</span><small>{record.b} · {record.c}</small></button>)}</div>}</div>{message.startsWith("Can not") && <a href={BIR_PAGE} target="_blank" rel="noreferrer">Search the official BIR page</a>}</div>}
+          {message && <div className="not-found"><div><strong>{message}</strong>{suggestions.length > 0 && <div className="suggestion-list">{suggestions.map((record) => <button type="button" key={`${record.c}-${record.b}-${record.s}`} onClick={() => selectSuggestion(record)}><span>{record.s}</span><small>{record.b} · {cityForSearch(record.c)}</small></button>)}</div>}</div>{message.startsWith("Can not") && <a href={BIR_PAGE} target="_blank" rel="noreferrer">Search the official BIR page</a>}</div>}
           {results.length > 0 && <>
             <div className="results-heading"><p className="eyebrow">Exact BIR match</p><h2>{results[0].s}</h2><p>{results[0].b} · {results[0].c}</p></div>
             <div className="result-list">
