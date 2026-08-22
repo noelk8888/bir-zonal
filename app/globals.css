@@ -115,6 +115,14 @@ button, input { font: inherit; }
 .details-grid a, .not-found a, .change-panel a, footer a { color: #b83a0b; }
 .not-found { display: flex; justify-content: space-between; gap: 18px; align-items: center; padding: 24px; background: #fff4e6; border: 1px solid #ffd8a8; border-radius: 16px; }
 .dark-mode .not-found, .dark-mode .change-panel { background: #30261e; border-color: #705737; }
+.suggestion-list { display: grid; gap: 8px; margin-top: 16px; }
+.suggestion-list button { display: grid; gap: 3px; width: 100%; padding: 12px 14px; color: #14212b; background: white; border: 1px solid #ffd8a8; border-radius: 10px; font: inherit; text-align: left; cursor: pointer; }
+.suggestion-list button:hover { background: #fff8f3; border-color: var(--orange); }
+.suggestion-list span { font-weight: 800; }
+.suggestion-list small { color: #5f6d76; font-size: 12px; }
+.dark-mode .suggestion-list button { color: #edf2f4; background: #182126; border-color: #705737; }
+.dark-mode .suggestion-list button:hover { background: #26343b; border-color: var(--orange); }
+.dark-mode .suggestion-list small { color: #aebbc2; }
 .change-panel { padding: 28px; background: #fff4e6; border: 1px solid #ffd8a8; border-radius: 18px; }
 .change-panel h2 { margin-top: 0; }
 .change-panel li { margin: 8px 0; }

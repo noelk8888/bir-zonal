@@ -60,6 +60,31 @@ function streetKey(value: string) {
     .trim();
 }
 
+function nearbyStreetMatches(records: ZonalRecord[], cities: string[], input: Extract<SearchInput, { mode: "address" }>) {
+  const requestedStreet = streetKey(input.street);
+  const requestedWords = new Set(requestedStreet.split(" ").filter(Boolean));
+  const scored = records
+    .filter((record) => cities.includes(key(record.c)))
+    .map((record) => {
+      const candidateStreet = streetKey(record.s);
+      const candidateWords = candidateStreet.split(" ").filter(Boolean);
+      const sharedWords = candidateWords.filter((word) => requestedWords.has(word)).length;
+      const score = candidateStreet.includes(requestedStreet) || requestedStreet.includes(candidateStreet)
+        ? 100 + sharedWords
+        : sharedWords / Math.max(requestedWords.size, candidateWords.length, 1);
+      return { record, score };
+    })
+    .filter(({ score }) => score > 0);
+  const sameBarangay = scored.filter(({ record }) => barangayKey(record.b) === barangayKey(input.barangay));
+  const candidates = sameBarangay.length ? sameBarangay : scored;
+  const unique = new Map<string, ZonalRecord>();
+  for (const { record } of candidates.sort((a, b) => b.score - a.score || a.record.s.localeCompare(b.record.s))) {
+    const identity = `${record.c}\u0000${record.b}\u0000${record.s}`;
+    if (!unique.has(identity)) unique.set(identity, record);
+  }
+  return [...unique.values()].slice(0, 5);
+}
+
 type SearchInput =
   | { mode: "address"; street: string; barangay: string; city: string }
   | { mode: "name"; name: string; city: string };
@@ -225,6 +250,7 @@ export default function Home() {
   const [searchMode, setSearchMode] = useState<SearchInput["mode"] | null>(null);
   const [message, setMessage] = useState("");
   const [results, setResults] = useState<ZonalRecord[]>([]);
+  const [suggestions, setSuggestions] = useState<ZonalRecord[]>([]);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
   const [clock, setClock] = useState<number | null>(null);
   const [checking, setChecking] = useState(false);
@@ -285,6 +311,7 @@ export default function Home() {
   function resetSearch() {
     setAddress("");
     setResults([]);
+    setSuggestions([]);
     setMessage("");
     setSearched(false);
     setSearchMode(null);
@@ -295,6 +322,7 @@ export default function Home() {
     event.preventDefault();
     setSearched(true);
     setResults([]);
+    setSuggestions([]);
     setMessage("");
     if (!index) {
       setMessage("The BIR search index is still loading. Please try again in a moment.");
@@ -346,13 +374,24 @@ export default function Home() {
           cities.includes(key(record.c)) && propertyNameMatches(record.s, parsed.name)
         );
       }
-      if (!matches.length) setMessage("Can not be found. Try to search manually.");
+      if (!matches.length) {
+        const nearby = parsed.mode === "address" ? nearbyStreetMatches(records, cities, parsed) : [];
+        setSuggestions(nearby);
+        setMessage(nearby.length ? "No exact match was found. Here are the closest BIR street names." : "Can not be found. Try to search manually.");
+      }
       else setResults(matches);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The search could not be completed.");
     } finally {
       setSearching(false);
     }
+  }
+
+  function selectSuggestion(record: ZonalRecord) {
+    setAddress(`${record.s}, Brgy ${record.b}, ${record.c}`);
+    setSuggestions([]);
+    setMessage("Suggestion selected. Search to confirm the exact BIR result.");
+    window.requestAnimationFrame(() => document.getElementById("address")?.focus());
   }
 
   async function checkForUpdates() {
@@ -445,7 +484,7 @@ export default function Home() {
 
       {searched && (
         <section className="results-section" aria-live="polite">
-          {message && <div className="not-found"><strong>{message}</strong>{message.startsWith("Can not") && <a href={BIR_PAGE} target="_blank" rel="noreferrer">Search the official BIR page</a>}</div>}
+          {message && <div className="not-found"><div><strong>{message}</strong>{suggestions.length > 0 && <div className="suggestion-list">{suggestions.map((record) => <button type="button" key={`${record.c}-${record.b}-${record.s}`} onClick={() => selectSuggestion(record)}><span>{record.s}</span><small>{record.b} · {record.c}</small></button>)}</div>}</div>{message.startsWith("Can not") && <a href={BIR_PAGE} target="_blank" rel="noreferrer">Search the official BIR page</a>}</div>}
           {results.length > 0 && <>
             <div className="results-heading"><p className="eyebrow">Exact BIR match</p><h2>{results[0].s}</h2><p>{results[0].b} · {results[0].c}</p></div>
             <div className="result-list">
