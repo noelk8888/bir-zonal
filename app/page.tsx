@@ -136,9 +136,6 @@ function resolveCities(input: string, cities: AppIndex["cities"]) {
     // Accept both normal spacing ("Makati City") and BIR's occasional
     // joined spelling ("MAKATICITY").
     .replace(/\s*(city|municipality)$/, "")
-    // A few BIR sheets store a city without a word break (for example
-    // "MAKATICITY"). Treat it as the same city a user writes as "Makati City".
-    .replace(/\s+/g, "")
     .trim();
   const requested = cityBase(input);
   const cityKeys = Object.keys(cities);
