@@ -238,11 +238,7 @@ async function liveEntriesForRegion(revenueRegion: string, datasetIds: string[])
 
 export default function Home() {
   const [address, setAddress] = useState("");
-  const [darkMode, setDarkMode] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const savedTheme = window.localStorage.getItem("bir-zonal-theme");
-    return savedTheme === "dark" || (savedTheme !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  });
+  const [darkMode, setDarkMode] = useState(false);
   const [index, setIndex] = useState<AppIndex | null>(null);
   const [loadingData, setLoadingData] = useState(true);
   const [searching, setSearching] = useState(false);
@@ -264,6 +260,13 @@ export default function Home() {
       return next;
     });
   }
+
+  useEffect(() => {
+    const savedTheme = window.localStorage.getItem("bir-zonal-theme");
+    const darkByPreference = savedTheme === "dark" || (savedTheme !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const timer = window.setTimeout(() => setDarkMode(darkByPreference), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     fetch(`/data/index.json?fresh=${Date.now()}`, { cache: "no-store" })
